@@ -4,11 +4,15 @@ FROM python:3.12-slim
 # Establecer el directorio de trabajo en el contenedor
 WORKDIR /app
 
+# Copiar requirements e instalar
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Copiar los archivos del backend al entorno aislado
-COPY . /app/
+COPY . .
 
 # Exponer el puerto para permitir la comunicación
-EXPOSE 5000
+EXPOSE 8000
 
-# Comando por defecto para iniciar el servidor TCP/HTTP
-CMD ["python", "server.py"]
+# Comando por defecto para iniciar el servidor
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
