@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from app.models.messages import ConnectedMsg, WaitingMsg, LobbyStateMsg
 
 from app.core.errors import GameError
 from app.models.messages import ConnectedMsg, WaitingMsg
@@ -8,7 +9,10 @@ router = APIRouter()
 CLOSE_ALREADY_CONNECTED = 4409
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, username: str = Query(...)):
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    username: str = Query(..., min_length=1, max_length=64)
+):
     # momentary: the username comes from the URL - no authentication yet.
     # the auth issue replaces it with a token validation.
     state = websocket.app.state
@@ -22,7 +26,11 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Query(...)):
         return
 
     try:
+
         await state.connections.send(username, ConnectedMsg(username=username))
+        
+        active_users = state.connections.get_online_users()
+        await state.connections.broadcast(LobbyStateMsg(online_users=active_users))
 
         room = await state.rooms.join_matchmaking(username)
 
@@ -39,3 +47,6 @@ async def websocket_endpoint(websocket: WebSocket, username: str = Query(...)):
     finally:
         state.rooms.cancel_waiting(username)
         state.connections.disconnect(username, websocket)
+
+        active_users = state.connections.get_online_users()
+        await state.connections.broadcast(LobbyStateMsg(online_users=active_users))
