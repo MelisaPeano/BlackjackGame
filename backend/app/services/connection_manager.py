@@ -33,3 +33,15 @@ class ConnectionManager:
             await websocket.send_json(message.model_dump(mode="json"))
         except Exception:
             logger.warning("Could not send message to %s", username)
+
+    def get_online_users(self) -> list[str]:
+        """Devuelve una lista con los nombres de todos los usuarios conectados."""
+        return list(self.connected_clients.keys())
+
+    async def broadcast(self, message: BaseModel):
+        """Envía un mensaje a todos los sockets conectados actualmente."""
+        for username, websocket in self.connected_clients.items():
+            try:
+                await websocket.send_json(message.model_dump(mode="json"))
+            except Exception:
+                logger.warning("Could not broadcast message to %s", username)

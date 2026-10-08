@@ -36,3 +36,33 @@ class ErrorMsg(BaseModel):
     type: Literal["error"] = "error"
     code: str
     message: str
+
+class LobbyStateMsg(BaseModel):
+    type: str = "lobby_state"
+    online_users: list[str]
+
+class InviteMsg(BaseModel):
+    """Payload para enviar una invitación de partida."""
+    type: str = "invite"
+    sender: str
+    target: str
+
+class InviteResponseMsg(BaseModel):
+    """Payload para responder a una invitación recibida."""
+    type: str = "invite_response"
+    sender: str
+    target: str
+    accepted: bool
+
+class InviteMsg(BaseModel):
+    """Payload enviado por el jugador que inicia la invitación."""
+    type: str = "invite"
+    sender: str
+    target: str
+
+class InviteResponseMsg(BaseModel):
+    """Payload enviado por el jugador receptor para aceptar o rechazar."""
+    type: str = "invite_response"
+    sender: str
+    target: str
+    accepted: bool
