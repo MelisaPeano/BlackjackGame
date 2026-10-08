@@ -344,5 +344,155 @@ La implementación de este proyecto seguirá las normas definidas en este docume
 ---
 
 ## 17. Arquitectura
+
 <img src="images/architecture.jpg" alt="arquitectura del juego" width="100%">
+
+### 17.1 Arquitectura Orientada a Eventos (Event-Driven Broker)
+
+El servidor implementa un patrón Broker / Event Bus asíncrono para desacoplar completamente la recepción de mensajes WebSocket del procesamiento de turnos y la persistencia de datos:
+
+```mermaid
+flowchart TD
+    subgraph Clientes["Clientes Frontend (React + Vite)"]
+        C1["Jugador 1 (WebSocket)"]
+        C2["Jugador 2 (WebSocket)"]
+    end
+
+    subgraph CapaRed["Capa de Red y Entrada"]
+        WS["Endpoint WebSocket (/ws)"]
+        Router["MessageRouter"]
+    end
+
+    subgraph BrokerEventos["Broker y Event Bus Asíncrono"]
+        Bus["EventBus (asyncio.Queue / Redis)"]
+        Worker["Event Worker en Segundo Plano"]
+    end
+
+    subgraph DominioJuego["Motor de Juego y Colas de Turno"]
+        Room["GameRoom (Sala de Juego)"]
+        ActionQueue["Cola de Acciones FIFO (action_queue)"]
+        Rules["Núcleo Funcional (blackjack_rules.py)"]
+    end
+
+    subgraph Notificaciones["Difusión de Estado"]
+        ConnMgr["ConnectionManager"]
+    end
+
+    C1 -->|Envía acción: hit / stand| WS
+    C2 -->|Envía acción: hit / stand| WS
+    WS -->|Pasa mensaje crudo| Router
+    Router -->|Publicación no bloqueante: PlayerActionSubmitted| Bus
+    Bus -->|Despacha evento| Worker
+    Worker -->|Encola en orden estricto| ActionQueue
+    ActionQueue -->|Consume secuencialmente| Room
+    Room -->|Ejecuta cálculos y reglas puras| Rules
+    Room -->|Publica GameStateUpdated| Bus
+    Bus -->|Notifica cambio de estado| ConnMgr
+    ConnMgr -->|Broadcast JSON sincronizado| C1
+    ConnMgr -->|Broadcast JSON sincronizado| C2
+```
+
+---
+
+### 17.2 Ciclo de Vida de Partida y Máquina de Estados por Turnos
+
+El juego progresa a través de una cola de turnos FIFO estricta que previene condiciones de carrera:
+
+```mermaid
+stateDiagram-v2
+    [*] --> WAITING: Creación de Sala
+    WAITING --> PLAYING: Matchmaking / Invitación Aceptada (Reparto Inicial de 2 cartas)
+    
+    state PLAYING {
+        [*] --> TURNO_JUGADOR_1
+        
+        TURNO_JUGADOR_1 --> TURNO_JUGADOR_1: HIT (Puntaje < 21)
+        TURNO_JUGADOR_1 --> TURNO_JUGADOR_2: STAND o BUST (>21) o 21
+        
+        TURNO_JUGADOR_2 --> TURNO_JUGADOR_2: HIT (Puntaje < 21)
+        TURNO_JUGADOR_2 --> DEALER_TURN: STAND o BUST (>21) o 21
+    }
+
+    PLAYING --> DEALER_TURN: Ambos jugadores finalizaron su turno
+    
+    state DEALER_TURN {
+        [*] --> EvaluarReglaDealer
+        EvaluarReglaDealer --> DealerPideCarta: Puntaje <= 16 (HIT)
+        DealerPideCarta --> EvaluarReglaDealer
+        EvaluarReglaDealer --> DealerSePlanta: Puntaje >= 17 o BUST (STAND)
+    }
+
+    DEALER_TURN --> FINISHED: Determinación Matemática de Ganadores
+    PLAYING --> FINISHED: Abandono / Desconexión (Victoria para jugador restante)
+    
+    FINISHED --> [*]
+```
+
+---
+
+### 17.3 Flujo de Registro, Autenticación y Conexión Segura
+
+Persistencia segura con hashing salado `bcrypt`, generación de tokens JWT e inicialización de sockets protegidos:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente as Jugador (Frontend)
+    participant AuthAPI as API Auth (/api/auth)
+    participant UserService as UserService (POO)
+    participant Sec as Security (bcrypt/JWT)
+    participant DB as MongoDB (users)
+    participant WS as WebSocket (/ws?token=...)
+
+    Note over Cliente,DB: Flujo de Registro Seguro
+    Cliente->>AuthAPI: POST /api/auth/register {username, password, email}
+    AuthAPI->>UserService: register_user(UserRegisterRequest)
+    UserService->>DB: find_one({username}) para verificar duplicados
+    UserService->>Sec: hash_password(password) con bcrypt + sal
+    Sec-->>UserService: hashed_password (cadena segura)
+    UserService->>DB: insert_one({username, hashed_password, chips: 10000})
+    UserService->>Sec: create_access_token(payload={sub: username, role: 'player'})
+    Sec-->>UserService: access_token (JWT firmado HS256)
+    UserService-->>AuthAPI: TokenResponse (token + datos públicos)
+    AuthAPI-->>Cliente: 201 Created {access_token, user}
+
+    Note over Cliente,WS: Flujo de Conexión en Tiempo Real
+    Cliente->>WS: Conectar ws://localhost:8000/ws?token=<JWT>
+    WS->>Sec: decode_access_token(token)
+    Sec-->>WS: payload válido (username extraído)
+    WS->>WS: Aceptar conexión y registrar en ConnectionManager
+    WS-->>Cliente: Mensaje 'connected' + 'lobby_state'
+```
+
+---
+
+### 17.4 Arquitectura Híbrida: Funcional + Orientada a Objetos (Functional Core, OOP Shell)
+
+Separación de responsabilidades entre el cálculo matemático puro y la orquestación de concurrencia e I/O:
+
+```mermaid
+classDiagram
+    class FunctionalCore {
+        <<Módulos Funcionales Puros>>
+        +calculate_score(cards) int
+        +is_bust(cards) bool
+        +is_blackjack(cards) bool
+        +should_dealer_hit(score) bool
+        +evaluate_hand_outcome(p_cards, d_cards) Outcome
+        +calculate_balance(balance, delta) int
+        +sanitize_username(name) str
+    }
+
+    class OOPImperativeShell {
+        <<Capa Orientada a Objetos y Concurrencia>>
+        GameRoom (action_queue, lock, estado)
+        EventBus (asyncio.Queue, worker)
+        UserService (I/O asíncrono MongoDB)
+        RoomManager (colecciones activas)
+        ConnectionManager (sockets en vivo)
+    }
+
+    OOPImperativeShell ..> FunctionalCore : Invoca funciones puras sin efectos secundarios
+```
+
 
