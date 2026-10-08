@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth import router as auth_router
 from app.api.ws import router as websocket_router
 from app.core.database import db_manager
+from app.core.event_bus import EventBus
 from app.services.connection_manager import ConnectionManager
 from app.services.message_router import MessageRouter
 from app.services.room_manager import RoomManager
@@ -13,17 +14,31 @@ from app.services.user_service import UserService
 
 logger = logging.getLogger("blackjack.main")
 
+# Inicialización de servicios desacoplados
+event_bus = EventBus()
+connections = ConnectionManager()
+rooms = RoomManager(connections, event_bus)
+user_service = UserService()
+router_service = MessageRouter(connections, rooms, event_bus)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Ciclo de vida de la aplicación: Inicialización y cierre de recursos (MongoDB, etc.)."""
+    """Ciclo de vida de la aplicación: Inicialización y cierre de recursos (MongoDB, EventBus, etc.)."""
+    # 1. Iniciar worker del EventBus
+    event_bus.start()
+
+    # 2. Conectar a MongoDB e inicializar índices
     try:
         db_manager.connect()
         await db_manager.init_indexes()
     except Exception as e:
         logger.warning("Aviso de conexión a MongoDB: %s", e)
+
     yield
+
     # Cierre ordenado de conexiones
+    await event_bus.stop()
     db_manager.close()
 
 
@@ -38,15 +53,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servicios y orquestadores principales en el estado global
-connections = ConnectionManager()
-rooms = RoomManager(connections)
-user_service = UserService()
-
+# Inyección de dependencias en el estado global
 app.state.connections = connections
 app.state.rooms = rooms
-app.state.router = MessageRouter(connections, rooms)
+app.state.router = router_service
 app.state.user_service = user_service
+app.state.event_bus = event_bus
 
 # Registro de routers de la API
 app.include_router(auth_router, prefix="/api/auth")
