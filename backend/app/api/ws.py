@@ -67,8 +67,8 @@ async def websocket_endpoint(
         pass
 
     finally:
-        # Limpieza de recursos al desconectarse el socket
-        state.rooms.cancel_waiting(username)
+        # Limpieza de recursos al desconectarse el socket y manejo de abandono de partida
+        await state.rooms.handle_disconnect(username)
         state.connections.disconnect(username, websocket)
 
         active_users = state.connections.get_online_users()

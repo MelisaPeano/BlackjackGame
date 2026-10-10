@@ -1,6 +1,7 @@
+import logging
 from typing import Any, Optional
 from bson import ObjectId
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.core.database import get_database
 from app.core.errors import GameError
@@ -13,13 +14,15 @@ from app.domain.user_logic import (
 )
 from app.models.user import UserLoginRequest, UserRegisterRequest, UserResponse
 
+logger = logging.getLogger("blackjack.user_service")
+
 
 class UserService:
     """Capa Orientada a Objetos: Gestiona el estado, persistencia de entrada/salida y orquesta las funciones de dominio."""
 
     def __init__(self, collection: Optional[Any] = None) -> None:
         self._custom_collection = collection
-        # Almacenamiento en memoria para pruebas unitarias sin dependencias externas
+        # Almacenamiento en memoria para pruebas unitarias o fallback en caso de indisponibilidad de la BD
         self._in_memory_users: dict[str, dict[str, Any]] = {}
 
     @property
@@ -34,7 +37,6 @@ class UserService:
 
     async def register_user(self, user_in: UserRegisterRequest) -> UserResponse:
         """Registra un nuevo usuario con contraseña hasheada utilizando funciones puras de dominio."""
-        # 1. Normalización y hash seguro
         normalized_username = sanitize_username(user_in.username)
         hashed_pwd = hash_password(user_in.password)
         user_record = build_user_record(
@@ -44,21 +46,22 @@ class UserService:
         )
 
         col = self.collection
-        # 2. Persistencia en MongoDB si la base de datos está conectada
+        # 1. Intentar persistencia en MongoDB
         if col is not None:
-            existing = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
-            if existing:
-                raise GameError("USER_ALREADY_EXISTS", f"El usuario '{normalized_username}' ya existe.")
-
             try:
+                existing = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
+                if existing:
+                    raise GameError("USER_ALREADY_EXISTS", f"El usuario '{normalized_username}' ya existe.")
+
                 result = await col.insert_one(user_record)
                 user_record["_id"] = result.inserted_id
+                return self._to_response(user_record)
             except DuplicateKeyError:
                 raise GameError("USER_ALREADY_EXISTS", f"El usuario '{normalized_username}' ya existe.")
+            except PyMongoError as err:
+                logger.warning("MongoDB no disponible (%s). Utilizando almacenamiento en memoria de respaldo.", err)
 
-            return self._to_response(user_record)
-
-        # 3. Modo alternativo en memoria (para pruebas unitarias)
+        # 2. Modo de respaldo en memoria
         if normalized_username.lower() in self._in_memory_users:
             raise GameError("USER_ALREADY_EXISTS", f"El usuario '{normalized_username}' ya existe.")
 
@@ -73,7 +76,11 @@ class UserService:
 
         doc = None
         if col is not None:
-            doc = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
+            try:
+                doc = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
+            except PyMongoError as err:
+                logger.warning("MongoDB no disponible (%s). Consultando almacenamiento en memoria de respaldo.", err)
+                doc = self._in_memory_users.get(normalized_username.lower())
         else:
             doc = self._in_memory_users.get(normalized_username.lower())
 
@@ -92,7 +99,11 @@ class UserService:
 
         doc = None
         if col is not None:
-            doc = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
+            try:
+                doc = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
+            except PyMongoError as err:
+                logger.warning("MongoDB no disponible (%s). Consultando almacenamiento en memoria de respaldo.", err)
+                doc = self._in_memory_users.get(normalized_username.lower())
         else:
             doc = self._in_memory_users.get(normalized_username.lower())
 
@@ -106,20 +117,21 @@ class UserService:
         col = self.collection
 
         if col is not None:
-            current_doc = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
-            if not current_doc:
-                raise GameError("USER_NOT_FOUND", f"Usuario '{username}' no encontrado.")
-
             try:
-                new_balance = calculate_balance(current_doc.get("chips", 0), amount_delta)
-            except ValueError as e:
-                raise GameError("INSUFFICIENT_FUNDS", str(e))
+                current_doc = await col.find_one({"username": {"$regex": f"^{normalized_username}$", "$options": "i"}})
+                if current_doc:
+                    try:
+                        new_balance = calculate_balance(current_doc.get("chips", 0), amount_delta)
+                    except ValueError as e:
+                        raise GameError("INSUFFICIENT_FUNDS", str(e))
 
-            await col.update_one(
-                {"_id": current_doc["_id"]},
-                {"$set": {"chips": new_balance}}
-            )
-            return new_balance
+                    await col.update_one(
+                        {"_id": current_doc["_id"]},
+                        {"$set": {"chips": new_balance}}
+                    )
+                    return new_balance
+            except PyMongoError as err:
+                logger.warning("MongoDB no disponible (%s). Actualizando en almacenamiento de respaldo.", err)
 
         user = self._in_memory_users.get(normalized_username.lower())
         if not user:
