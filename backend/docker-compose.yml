@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  # Servicio de Base de Datos
+  mongodb:
+    image: mongo:latest
+    container_name: blackjack-db
+    ports:
+      - "27017:27017" # Expone el puerto hacia tu Ubuntu local
+    volumes:
+      - mongodb_data:/data/db # Hace que los datos persistan aunque apagues el contenedor
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:

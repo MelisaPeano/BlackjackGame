@@ -31,14 +31,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   return null;
 });
 
-  const login = (username: string) => {
+ const login = (username: string, token: string) => {
     setUser({
-      id: 'usr_777',
-      username: username || 'Admin_Casino',
-      chips: 10000,
-      role: 'admin'
+      id: 'usr_real',
+      username: username,
+      chips: 10000, 
+      role: 'player'
     });
-    localStorage.setItem('casino_auth_token', 'mock_token_123');
+    localStorage.setItem('casino_auth_token', token);
   };
 
   const logout = () => {

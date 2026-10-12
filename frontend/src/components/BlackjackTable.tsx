@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSoundEffects } from '../hooks/useSoundEffects';
+import { useNavigate } from 'react-router-dom';
 
 import chip1 from '../assets/images/blackjack/pokerchip1.png';
 import chip2 from '../assets/images/blackjack/pokerchip2.png';
@@ -67,6 +68,7 @@ const calculateHandValue = (hand: Card[]) => {
 
 const BlackjackTable: React.FC = () => {
   const { user, updateChips } = useAuth();
+  const navigate = useNavigate();
   const { playChip, playPlaceBet, playCard, playWin, playLose } = useSoundEffects();
   
   
@@ -284,7 +286,22 @@ const clearBet = () => {
         <p className="font-bold text-lg">{user?.username}</p>
         <p>Fichas: ${user?.chips}</p>
       </div>
+      {/* Información del Usuario (Izquierda) */}
+      <div className="absolute top-8 left-8 text-green-200/80">
+        <p className="font-bold text-lg">{user?.username}</p>
+        <p>Fichas: ${user?.chips}</p>
+      </div>
+
+      {/* Botón para Volver al Dashboard (Derecha) */}
+      <button
+        onClick={() => navigate('/dashboard')}
+        className="absolute top-8 right-8 px-4 py-2 bg-black/40 hover:bg-black/60 text-yellow-500 font-bold rounded-lg border border-yellow-500/50 transition-colors shadow-md z-50 flex items-center"
+      >
+        <span>← Volver al Dashboard</span>
+      </button>
+
     </div>
+    
   );
 };
 

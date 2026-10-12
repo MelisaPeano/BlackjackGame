@@ -2,6 +2,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 import bcrypt
 import jwt
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_inseguro_cambiar")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 from app.core.config import settings
 

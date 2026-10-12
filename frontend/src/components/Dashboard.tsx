@@ -1,12 +1,20 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useServerMock } from '../hooks/useServerMock';
-import { Users, Gamepad2, Server, Activity, LogOut, UserCircle2, Play, Trophy } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+import { Users, Gamepad2, Server, Activity, LogOut, Play, Trophy } from 'lucide-react';
 import cardBack from '../assets/images/blackjack/card_back.png';
 
 const Dashboard: React.FC = () => {
-  const { stats, users } = useServerMock();
+  const { onlineUsers, sendInvite } = useSocket();
   const navigate = useNavigate();
+
+  // Métricas simuladas temporales hasta que Dev 2 conecte la base de datos
+  const stats = {
+    onlineUsers: onlineUsers.length + 1, // +1 para contarte a ti mismo
+    activeGames: 2,
+    serverStatus: 'ONLINE',
+    cpuUsage: '14%'
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('casino_auth_token');
@@ -96,33 +104,28 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Lista de Usuarios */}
+        {/* Lista de Usuarios en Vivo */}
         <div className="bg-slate-800/80 backdrop-blur-md rounded-2xl border border-yellow-500/30 shadow-[0_0_20px_rgba(212,175,55,0.05)] overflow-hidden">
           <div className="px-6 py-4 border-b border-yellow-500/20 bg-slate-900/50">
             <h2 className="text-lg font-bold text-white font-serif">Jugadores en el Lobby</h2>
           </div>
-          <div className="divide-y divide-slate-700/50">
-            {users.map((user) => (
-              <div key={user.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-slate-700/50 rounded-full">
-                    <UserCircle2 className="w-6 h-6 text-yellow-500/70" />
-                  </div>
-                  <span className="font-medium text-slate-200">{user.username}</span>
-                </div>
-                <span className={`px-3 py-1 text-xs font-bold rounded-full border ${
-                  user.status === 'playing' 
-                    ? 'bg-green-500/10 text-green-400 border-green-500/30' 
-                    : 'bg-slate-500/10 text-slate-400 border-slate-500/30'
-                }`}>
-                  {user.status === 'playing' ? 'En Mesa' : 'Esperando'}
-                </span>
-              </div>
-            ))}
-            {users.length === 0 && (
-              <div className="px-6 py-8 text-center text-slate-500">
-                No hay jugadores conectados actualmente.
-              </div>
+          <div className="p-6">
+            {onlineUsers.length === 0 ? (
+              <p className="text-slate-400 text-center py-4">Esperando contrincantes...</p>
+            ) : (
+              <ul className="space-y-3">
+                {onlineUsers.map(onlineUser => (
+                  <li key={onlineUser} className="flex justify-between items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700 hover:bg-slate-700/50 transition-colors text-white">
+                    <span className="font-medium">{onlineUser}</span>
+                    <button 
+                      onClick={() => sendInvite(onlineUser)}
+                      className="bg-yellow-600 hover:bg-yellow-500 text-slate-900 px-4 py-1.5 rounded-md text-sm font-bold shadow-md transition-colors"
+                    >
+                      Invitar a Mesa
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>
