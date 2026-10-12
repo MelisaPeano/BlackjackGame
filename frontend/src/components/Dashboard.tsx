@@ -1,20 +1,79 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useServerMock } from '../hooks/useServerMock';
-import { Users, Gamepad2, Server, Activity, LogOut, UserCircle2, Play, Trophy } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
+import { Users, Gamepad2, Server, Activity, LogOut, Play, Trophy, UserCircle2 } from 'lucide-react';
 import cardBack from '../assets/images/blackjack/card_back.png';
 
 const Dashboard: React.FC = () => {
-  const { stats, users } = useServerMock();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { 
+    onlineUsers, 
+    sendInvite, 
+    incomingInvite, 
+    respondInvite, 
+    gameStarted, 
+    setGameStarted 
+  } = useSocket();
+
+  // Redirección automática al detectar el inicio del juego
+  useEffect(() => {
+    if (gameStarted) {
+      setGameStarted(false); // Reseteamos la bandera
+      navigate('/game');
+    }
+  }, [gameStarted, navigate, setGameStarted]);
+
+  // Métricas simuladas temporales hasta que Dev 2 conecte la base de datos
+  const stats = {
+    onlineUsers: onlineUsers.length + 1, // +1 para contarte a ti mismo
+    activeGames: 2,
+    serverStatus: 'ONLINE',
+    cpuUsage: '14%'
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('casino_auth_token');
     navigate('/login');
   };
 
+  // Filtramos estrictamente al usuario actual para que no se vea a sí mismo
+  const filteredUsers = onlineUsers.filter(u => u !== user?.username);
+
   return (
-    <div className="min-h-screen bg-slate-900 p-6 text-slate-200 font-sans">
+    <div className="min-h-screen bg-slate-900 p-6 text-slate-200 font-sans relative">
+      
+      {/* --- MODAL DE INVITACIÓN ENTRANTE --- */}
+      {incomingInvite && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-slate-800 p-8 rounded-2xl border border-yellow-500/50 shadow-[0_0_40px_rgba(212,175,55,0.3)] text-center max-w-md w-full mx-4">
+            <h3 className="text-2xl font-bold text-white mb-4 font-serif">¡Nueva Invitación!</h3>
+            <p className="text-slate-300 mb-8">
+              <strong className="text-yellow-500 text-lg">{incomingInvite}</strong> te ha invitado a jugar una partida en la Mesa VIP.
+            </p>
+            <div className="flex space-x-4 justify-center">
+              <button
+                onClick={() => respondInvite(incomingInvite, false)}
+                className="px-6 py-2 bg-slate-700/50 text-red-400 border border-red-900/50 rounded-lg hover:bg-red-900/40 transition-colors font-bold w-full"
+              >
+                Rechazar
+              </button>
+              <button
+                onClick={() => {
+                  respondInvite(incomingInvite, true);
+                  navigate('/game'); // Redirige al invitado a la mesa
+                }}
+                className="px-6 py-2 bg-yellow-600 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-bold shadow-md w-full"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ---------------------------------- */}
+
       {/* Header */}
       <header className="max-w-6xl mx-auto flex justify-between items-center mb-8 border-b border-yellow-500/20 pb-4">
         <div className="flex items-center space-x-3">
@@ -23,9 +82,14 @@ const Dashboard: React.FC = () => {
             alt="Casino Card" 
             className="w-16 h-auto drop-shadow-[0_0_15px_rgba(255,215,0,0.5)]"
           />
-          <h1 className="text-2xl font-bold font-serif text-white tracking-wide">
-            Panel de Administración
-          </h1>
+          <div>
+            <h1 className="text-2xl font-bold font-serif text-white tracking-wide">
+              Panel de {user?.username}
+            </h1>
+            <p className="text-yellow-500 font-bold text-sm">
+              Saldo disponible: ${user?.chips}
+            </p>
+          </div>
         </div>
         <button
           onClick={handleLogout}
@@ -96,33 +160,31 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Lista de Usuarios */}
+        {/* Lista de Usuarios en Vivo */}
         <div className="bg-slate-800/80 backdrop-blur-md rounded-2xl border border-yellow-500/30 shadow-[0_0_20px_rgba(212,175,55,0.05)] overflow-hidden">
           <div className="px-6 py-4 border-b border-yellow-500/20 bg-slate-900/50">
             <h2 className="text-lg font-bold text-white font-serif">Jugadores en el Lobby</h2>
           </div>
-          <div className="divide-y divide-slate-700/50">
-            {users.map((user) => (
-              <div key={user.id} className="px-6 py-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <div className="p-2 bg-slate-700/50 rounded-full">
-                    <UserCircle2 className="w-6 h-6 text-yellow-500/70" />
-                  </div>
-                  <span className="font-medium text-slate-200">{user.username}</span>
-                </div>
-                <span className={`px-3 py-1 text-xs font-bold rounded-full border ${
-                  user.status === 'playing' 
-                    ? 'bg-green-500/10 text-green-400 border-green-500/30' 
-                    : 'bg-slate-500/10 text-slate-400 border-slate-500/30'
-                }`}>
-                  {user.status === 'playing' ? 'En Mesa' : 'Esperando'}
-                </span>
-              </div>
-            ))}
-            {users.length === 0 && (
-              <div className="px-6 py-8 text-center text-slate-500">
-                No hay jugadores conectados actualmente.
-              </div>
+          <div className="p-6">
+            {filteredUsers.length === 0 ? (
+              <p className="text-slate-400 text-center py-4">Esperando contrincantes...</p>
+            ) : (
+              <ul className="space-y-3">
+                {filteredUsers.map(onlineUser => (
+                  <li key={onlineUser} className="flex justify-between items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700 hover:bg-slate-700/50 transition-colors text-white">
+                    <div className="flex items-center space-x-3">
+                        <UserCircle2 className="w-5 h-5 text-yellow-500/70" />
+                        <span className="font-medium">{onlineUser}</span>
+                    </div>
+                    <button 
+                      onClick={() => sendInvite(onlineUser)}
+                      className="bg-yellow-600 hover:bg-yellow-500 text-slate-900 px-4 py-1.5 rounded-md text-sm font-bold shadow-md transition-colors"
+                    >
+                      Invitar a Mesa
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>

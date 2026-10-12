@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useContext, type ReactNode } from 'react';
 
 interface User {
   id: string;
@@ -17,33 +17,36 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+const [user, setUser] = useState<User | null>(() => {
+    const token = localStorage.getItem('casino_auth_token');
+    const savedUsername = localStorage.getItem('casino_username'); // Recuperamos el nombre real
+    
+    if (token && savedUsername) {
+      return {
+        id: 'usr_777',
+        username: savedUsername,
+        chips: 10000,
+        role: 'player'
+      };
+    }
+    return null;
+  });
 
-  const [user, setUser] = useState<User | null>(() => {
-  const token = localStorage.getItem('casino_auth_token');
-  if (token) {
-    return {
-      id: 'usr_777',
-      username: 'Jugador_Recuperado', // Opcionalmente puedes guardar el nombre real en localStorage
-      chips: 10000,
-      role: 'player'
-    };
-  }
-  return null;
-});
-
-  const login = (username: string) => {
+  const login = (username: string, token: string) => {
     setUser({
       id: 'usr_777',
-      username: username || 'Admin_Casino',
+      username: username,
       chips: 10000,
-      role: 'admin'
+      role: 'player'
     });
-    localStorage.setItem('casino_auth_token', 'mock_token_123');
+    localStorage.setItem('casino_auth_token', token);
+    localStorage.setItem('casino_username', username); // Guardamos el nombre real
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('casino_auth_token');
+    localStorage.removeItem('casino_username');
   };
 
   // Función para sumar o restar saldo al estado global

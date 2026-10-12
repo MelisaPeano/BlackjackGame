@@ -45,6 +45,9 @@ class UserService:
             email=user_in.email,
         )
 
+        # --- NUEVO: Inyectar fichas iniciales por defecto ---
+        user_record["chips"] = 10000
+
         col = self.collection
         # 1. Intentar persistencia en MongoDB
         if col is not None:

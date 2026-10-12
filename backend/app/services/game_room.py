@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 import logging
 from typing import Any, Optional
 
@@ -23,6 +24,7 @@ from app.models.outcome_enum import OutcomeEnum
 from app.models.player_action_enum import PlayerActionEnum
 from app.models.player_status_enum import PlayerStatusEnum
 from app.services.connection_manager import ConnectionManager
+from app.core.errors import GameError
 
 logger = logging.getLogger("blackjack.game_room")
 
@@ -326,3 +328,35 @@ class GameRoom:
                 await self._queue_worker_task
             except asyncio.CancelledError:
                 pass
+    async def start_private_game(self, host: str, guest: str):
+        """Crea una partida privada tras una invitación aceptada, blindando el límite de 2 jugadores."""
+        # 1. Sacar a los jugadores de la cola general
+        self.cancel_waiting(host)
+        self.cancel_waiting(guest)
+
+        # 2. Generar un ID único para la mesa
+        room_id = uuid.uuid4().hex
+
+        # 3. Instanciar la sala pasando exactamente los 2 jugadores (Límite estricto)
+        from app.services.game_room import GameRoom
+        room = GameRoom(
+            room_id=room_id, 
+            username1=host, 
+            username2=guest, 
+            connections=self.connections
+        ) 
+        
+        # 4. Registrar la sala y los jugadores en los diccionarios del manager
+        if not hasattr(self, 'active_rooms'):
+            self.active_rooms = {}
+        if not hasattr(self, 'user_room'):
+            self.user_room = {}
+            
+        self.active_rooms[room.room_id] = room
+        self.user_room[host] = room.room_id
+        self.user_room[guest] = room.room_id
+
+        # 5. Iniciar la partida (reparto de cartas)
+        await room.start_game()
+        
+        return room

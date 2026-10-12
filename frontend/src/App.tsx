@@ -6,6 +6,7 @@ import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import BlackjackTable from './components/BlackjackTable'; 
 import Scoreboard from './components/Scoreboard';
+import { SocketProvider } from './context/SocketContext';
 
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -16,6 +17,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const App: React.FC = () => {
   return (
     <AuthProvider>
+      <SocketProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
@@ -51,6 +53,7 @@ const App: React.FC = () => {
           />
         </Routes>
       </BrowserRouter>
+      </SocketProvider>
     </AuthProvider>
   );
 };

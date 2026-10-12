@@ -15,31 +15,26 @@ CLOSE_INVALID_AUTH = 4401
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket, 
-    username: Optional[str] = Query(None, min_length=1, max_length=64),
-    token: Optional[str] = Query(None),
+    token: str = Query(...)
 ):
     """
     Punto de conexión WebSocket.
-    Autentica preferentemente mediante el token JWT en la URL (?token=...).
-    Mantiene compatibilidad hacia atrás permitiendo ?username=... si aún no hay token.
+    Autentica ESTRICTAMENTE mediante el token JWT en la URL (?token=...).
     """
-    if token:
-        payload = decode_access_token(token)
-        if not payload or "sub" not in payload:
-            await websocket.close(code=CLOSE_INVALID_AUTH, reason="Token de autenticación inválido o expirado")
-            return
-        username = payload["sub"]
-
-    if not username:
-        await websocket.close(code=CLOSE_INVALID_AUTH, reason="Nombre de usuario o token requerido")
+    # 1. Validación estricta del token (sin fallback)
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        await websocket.close(code=CLOSE_INVALID_AUTH, reason="Token de autenticación inválido o expirado")
         return
+    
+    username = payload["sub"]
 
     state = websocket.app.state
     
     await websocket.accept()
 
     try:
-        # Registrar conexión del usuario
+        # Registrar conexión del usuario autenticado
         state.connections.connect(username, websocket)
     except GameError as err:
         await websocket.close(code=CLOSE_ALREADY_CONNECTED, reason=err.message)
@@ -67,7 +62,7 @@ async def websocket_endpoint(
         pass
 
     finally:
-        # Limpieza de recursos al desconectarse el socket y manejo de abandono de partida
+        # Limpieza de recursos al desconectarse el socket
         await state.rooms.handle_disconnect(username)
         state.connections.disconnect(username, websocket)
 

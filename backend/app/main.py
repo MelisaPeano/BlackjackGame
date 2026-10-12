@@ -2,6 +2,8 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
 
 from app.api.auth import router as auth_router
 from app.api.ws import router as websocket_router
@@ -13,6 +15,21 @@ from app.services.room_manager import RoomManager
 from app.services.user_service import UserService
 
 logger = logging.getLogger("blackjack.main")
+
+load_dotenv()
+
+app = FastAPI(title="Blackjack Game API")
+
+# Configuración de CORS
+origins = os.getenv("CORS_ORIGINS", "").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Inicialización de servicios desacoplados
 event_bus = EventBus()
