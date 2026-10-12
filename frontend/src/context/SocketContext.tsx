@@ -1,10 +1,16 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 
 interface SocketContextType {
   socket: WebSocket | null;
   onlineUsers: string[];
   sendInvite: (target: string) => void;
+  incomingInvite: string | null;
+  respondInvite: (sender: string, accept: boolean) => void;
+  gameStarted: boolean;
+  setGameStarted: (val: boolean) => void;
+  gameState: any;
+  setGameState: (val: any) => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -13,35 +19,41 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [incomingInvite, setIncomingInvite] = useState<string | null>(null);
+  
+  // Faltaba inicializar el estado de inicio de juego
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameState, setGameState] = useState<any>(null);
 
   useEffect(() => {
-  if (!user) return;
+    if (!user) return;
 
-  const token = localStorage.getItem('casino_auth_token');
-  if (!token) {
-    console.error("No hay token de autenticación disponible");
-    return;
-  }
+    const token = localStorage.getItem('casino_auth_token');
+    if (!token) return;
 
-  const baseUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:8000/ws';
-  
-  const ws = new WebSocket(`${baseUrl}?token=${token}`);
-
-  ws.onopen = () => console.log('Conexión TCP establecida con éxito');
+    const baseUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:8000/ws';
+    const ws = new WebSocket(`${baseUrl}?token=${token}`);
 
     ws.onopen = () => console.log('Conexión TCP establecida con éxito');
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
       
-      // Capturar la lista de usuarios en vivo (Tu ticket de Redes - Conexiones)
       if (data.type === 'lobby_state') {
         setOnlineUsers(data.online_users.filter((u: string) => u !== user.username));
       }
       
-      // Aquí agregaremos la captura de invitaciones en el siguiente paso
       if (data.type === 'invite') {
-        console.log("Invitación recibida de:", data.sender);
+        setIncomingInvite(data.sender);
+      }
+
+      if (data.type === 'invite_response' && data.accepted) {
+        setGameStarted(true);
+      }
+
+      if (data.type === 'game_state') {
+        setGameStarted(true);
+        setGameState(data.state); 
       }
     };
 
@@ -49,7 +61,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     
     setSocket(ws);
 
-    // Cierre ordenado al desmontar o cerrar sesión
     return () => {
       ws.close();
     };
@@ -61,8 +72,25 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const respondInvite = (sender: string, accept: boolean) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'invite_response', target: sender, accepted: accept }));
+    }
+    setIncomingInvite(null);
+  };
+
   return (
-    <SocketContext.Provider value={{ socket, onlineUsers, sendInvite }}>
+    <SocketContext.Provider value={{ 
+      socket, 
+      onlineUsers, 
+      sendInvite, 
+      incomingInvite, 
+      respondInvite, 
+      gameStarted, 
+      setGameStarted,
+      gameState,     // Ahora la mesa podrá leer los datos del backend
+      setGameState 
+    }}>
       {children}
     </SocketContext.Provider>
   );
