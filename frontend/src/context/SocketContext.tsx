@@ -16,17 +16,16 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
 export const SocketProvider = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
+  const { user } = useAuth(); 
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [incomingInvite, setIncomingInvite] = useState<string | null>(null);
-  
-  // Faltaba inicializar el estado de inicio de juego
   const [gameStarted, setGameStarted] = useState(false);
   const [gameState, setGameState] = useState<any>(null);
 
   useEffect(() => {
-    if (!user) return;
+    // Al depender del string primitivo, evitamos reconexiones al cambiar el saldo
+    if (!user?.username) return;
 
     const token = localStorage.getItem('casino_auth_token');
     if (!token) return;
@@ -52,7 +51,11 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (data.type === 'game_state') {
-        setGameStarted(true);
+        // CLAVE: Solo activamos la redirección si la partida NO ha finalizado
+        const stateStr = String(data.state?.state).toLowerCase();
+        if (stateStr !== 'finished') {
+          setGameStarted(true);
+        }
         setGameState(data.state); 
       }
     };
@@ -64,7 +67,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       ws.close();
     };
-  }, [user]);
+  }, [user?.username]);
 
   const sendInvite = (target: string) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -81,15 +84,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <SocketContext.Provider value={{ 
-      socket, 
-      onlineUsers, 
-      sendInvite, 
-      incomingInvite, 
-      respondInvite, 
-      gameStarted, 
-      setGameStarted,
-      gameState,     // Ahora la mesa podrá leer los datos del backend
-      setGameState 
+      socket, onlineUsers, sendInvite, incomingInvite, respondInvite, gameStarted, setGameStarted, gameState, setGameState 
     }}>
       {children}
     </SocketContext.Provider>
