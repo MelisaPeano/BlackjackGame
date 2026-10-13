@@ -2,23 +2,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 import bcrypt
 import jwt
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback_inseguro_cambiar")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 from app.core.config import settings
-
 
 def hash_password(password: str) -> str:
     """Función de seguridad: Genera el hash seguro de la contraseña usando bcrypt con sal aleatoria automática."""
     pwd_bytes = password.encode("utf-8")
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
-
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Función de seguridad: Compara una contraseña en texto plano contra el hash almacenado con bcrypt."""
@@ -29,7 +20,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         )
     except (ValueError, TypeError):
         return False
-
 
 def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Genera un token de acceso JWT firmado digitalmente con tiempo de expiración."""
@@ -42,7 +32,6 @@ def create_access_token(data: dict[str, Any], expires_delta: Optional[timedelta]
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
-
 
 def decode_access_token(token: str) -> Optional[dict[str, Any]]:
     """Decodifica y valida la firma y expiración de un token JWT. Retorna el payload si es válido."""
