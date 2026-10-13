@@ -25,6 +25,7 @@ from app.models.player_action_enum import PlayerActionEnum
 from app.models.player_status_enum import PlayerStatusEnum
 from app.services.connection_manager import ConnectionManager
 from app.core.errors import GameError
+from app.services.user_service import UserService
 
 logger = logging.getLogger("blackjack.game_room")
 

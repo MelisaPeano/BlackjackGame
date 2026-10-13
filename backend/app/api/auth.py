@@ -84,3 +84,20 @@ async def login(
 async def get_me(current_user: UserResponse = Depends(get_current_user)):
     """Endpoint protegido: Retorna la información de perfil y fichas del usuario autenticado."""
     return current_user
+
+@router.get("/scoreboard")
+async def get_scoreboard(service: UserService = Depends(get_user_service)):
+    """Endpoint público: Retorna el ranking de los mejores jugadores."""
+    leaderboard = await service.get_leaderboard()
+    
+    result = [
+        {
+            "id": str(user.get("_id", i)),
+            "username": user.get("username", "Jugador Desconocido"),
+            "wins": user.get("wins", 0),
+            "ties": user.get("ties", 0),
+            "score": user.get("score", 0)
+        }
+        for i, user in enumerate(leaderboard)
+    ]
+    return result

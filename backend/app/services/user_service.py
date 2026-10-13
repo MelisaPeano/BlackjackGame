@@ -152,3 +152,57 @@ class UserService:
         """Transforma un documento crudo en el modelo de respuesta UserResponse."""
         dto = map_user_to_dto(doc)
         return UserResponse(**dto)
+
+    async def get_leaderboard(self, limit: int = 10) -> list[dict[str, Any]]:
+        """Recupera los mejores jugadores ordenados por victorias y empates."""
+        col = self.collection
+        if col is not None:
+            try:
+                cursor = col.find(
+                    {},
+                    {"_id": 1, "username": 1, "wins": 1, "ties": 1, "score": 1}
+                ).sort([("wins", -1), ("ties", -1)]).limit(limit)
+                
+                docs = await cursor.to_list(length=limit)
+                
+                for doc in docs:
+                    doc["wins"] = doc.get("wins", 0)
+                    doc["ties"] = doc.get("ties", 0)
+                    doc["score"] = doc.get("score", doc["wins"] * 3 + doc["ties"]) 
+                    doc["_id"] = str(doc["_id"])
+                return docs
+            except PyMongoError as err:
+                logger.warning("MongoDB no disponible (%s). Usando fallback en memoria.", err)
+
+        users = list(self._in_memory_users.values())
+        for u in users:
+            u["wins"] = u.get("wins", 0)
+            u["ties"] = u.get("ties", 0)
+            u["score"] = u.get("score", u["wins"] * 3 + u["ties"])
+            
+        users.sort(key=lambda x: (x.get("wins", 0), x.get("ties", 0)), reverse=True)
+        return users[:limit]
+
+    async def record_match_result(self, username: str, result: str):
+        """Suma +1 a victorias o empates al finalizar una partida."""
+        normalized_username = sanitize_username(username)
+        col = self.collection
+
+        # Si el resultado es derrota (loss), no sumamos nada al ranking
+        if result not in ["win", "tie"]:
+            return
+
+        if col is not None:
+            try:
+                await col.update_one(
+                    {"username": {"$regex": f"^{normalized_username}$", "$options": "i"}},
+                    {"$inc": {f"{result}s": 1}} # Incrementa "wins" o "ties"
+                )
+            except PyMongoError as err:
+                logger.warning("MongoDB no disponible al registrar resultado: %s", err)
+                
+        # Fallback en memoria
+        user = self._in_memory_users.get(normalized_username.lower())
+        if user:
+            field = f"{result}s"
+            user[field] = user.get(field, 0) + 1

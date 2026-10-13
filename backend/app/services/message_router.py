@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Optional
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from app.core.errors import GameError
 from app.core.event_bus import EventBus
@@ -10,21 +10,15 @@ from app.models.messages import (
     ErrorMsg,
     InviteMsg,
     InviteResponseMsg,
+    ScoreUpdateMsg,
     client_message_adapter,
 )
 from app.models.player_action_enum import PlayerActionEnum
 from app.services.connection_manager import ConnectionManager
 from app.services.room_manager import RoomManager
+from app.services.user_service import UserService
 
 logger = logging.getLogger("blackjack.message_router")
-
-
-class ScoreUpdateMsg(BaseModel):
-    """Payload enviado al finalizar la partida para actualizar el ranking."""
-    type: str = "score_update"
-    username: str
-    result: str
-
 
 class MessageRouter:
     """
@@ -53,13 +47,20 @@ class MessageRouter:
         try:
             data = json.loads(raw)
             msg_type = data.get("type")
+        except Exception as e:
+            logger.warning("Fallo al procesar el JSON base: %s", e)
+            msg_type = None
 
-            if msg_type == "invite":
+        if msg_type == "invite":
+            try:
                 invite_msg = InviteMsg(sender=username, target=data.get("target"))
                 await self.connections.send(data.get("target"), invite_msg)
-                return
+            except Exception as e:
+                logger.error("[ROUTER ERROR] Fallo creando o enviando InviteMsg: %s", e)
+            return
 
-            if msg_type == "invite_response":
+        if msg_type == "invite_response":
+            try:
                 response_msg = InviteResponseMsg(
                     sender=username, 
                     target=data.get("target"), 
@@ -69,10 +70,26 @@ class MessageRouter:
                 
                 if data.get("accepted"):
                     await self.rooms.start_private_game(data.get("target"), username)
-                return
-        except Exception:
-            # Si no es un mensaje de lobby con formato JSON plano, continuamos con las acciones de juego
-            pass
+            except Exception as e:
+                logger.error("[ROUTER ERROR] Fallo procesando InviteResponseMsg: %s", e)
+            return
+
+        # --- NUEVA LÓGICA PARA EL SCOREBOARD ---
+        if msg_type == "score_update":
+            try:
+                score_msg = ScoreUpdateMsg(**data)
+                
+                # Validación de seguridad: el socket solo puede actualizar su propio puntaje
+                if username == score_msg.username:
+                    user_service = UserService()
+                    await user_service.record_match_result(username, score_msg.result)
+                else:
+                    logger.error("[ROUTER ERROR] Alerta: %s intentó modificar puntaje de %s", username, score_msg.username)
+                    
+            except Exception as e:
+                logger.error("[ROUTER ERROR] Fallo procesando score_update: %s", e)
+            return
+        # ---------------------------------------
 
         # 2. Validación estricta del esquema de jugadas de la mesa (hit, stand)
         try:

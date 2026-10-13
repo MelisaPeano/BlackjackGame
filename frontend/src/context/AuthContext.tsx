@@ -17,13 +17,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-const [user, setUser] = useState<User | null>(() => {
+  const [user, setUser] = useState<User | null>(() => {
     const token = localStorage.getItem('casino_auth_token');
-    const savedUsername = localStorage.getItem('casino_username'); // Recuperamos el nombre real
+    const savedUsername = localStorage.getItem('casino_username'); 
     
     if (token && savedUsername) {
       return {
-        id: 'usr_777',
+        id: 'usr_real', // Reemplazar con ID real si tu API lo provee en el JWT
         username: savedUsername,
         chips: 10000,
         role: 'player'
@@ -34,13 +34,14 @@ const [user, setUser] = useState<User | null>(() => {
 
   const login = (username: string, token: string) => {
     setUser({
-      id: 'usr_777',
+      id: 'usr_real',
       username: username,
       chips: 10000,
       role: 'player'
     });
+    // Guardar el token y el nombre exacto
     localStorage.setItem('casino_auth_token', token);
-    localStorage.setItem('casino_username', username); // Guardamos el nombre real
+    localStorage.setItem('casino_username', username); 
   };
 
   const logout = () => {
@@ -48,7 +49,6 @@ const [user, setUser] = useState<User | null>(() => {
     localStorage.removeItem('casino_auth_token');
     localStorage.removeItem('casino_username');
   };
-
   // Función para sumar o restar saldo al estado global
   const updateChips = (amount: number) => {
     setUser(prev => prev ? { ...prev, chips: prev.chips + amount } : prev);

@@ -1,7 +1,12 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { useNavigate } from 'react-router-dom';
+import { useSoundEffects } from '../hooks/useSoundEffects';
+
+import chip1 from '../assets/images/blackjack/pokerchip1.png';
+import chip2 from '../assets/images/blackjack/pokerchip2.png';
+import chip3 from '../assets/images/blackjack/pokerchip3.png';
 
 const cardImages = import.meta.glob('../assets/images/blackjack/*.png', { 
   eager: true, 
@@ -14,19 +19,12 @@ const getCardImage = (card: any) => {
     return (cardImages['../assets/images/blackjack/card_back.png'] as string) || '';
   }
 
-  // Diccionario para traducir las figuras del backend al nombre del archivo
   const faceCards: Record<string, string> = {
-    'A': 'ace',
-    'J': 'jack',
-    'Q': 'queen',
-    'K': 'king'
+    'A': 'ace', 'J': 'jack', 'Q': 'queen', 'K': 'king'
   };
 
-  // Normalizamos el rango (ej. "J" -> "jack", "10" -> "10")
   const rankStr = card.rank.toString().toUpperCase();
   const mappedRank = faceCards[rankStr] || rankStr.toLowerCase();
-  
-  // Normalizamos el palo (ej. "Spades" -> "spades")
   const mappedSuit = card.suit.toLowerCase();
 
   const fileName = `${mappedRank}_of_${mappedSuit}.png`;
@@ -36,11 +34,50 @@ const getCardImage = (card: any) => {
 };
 
 const BlackjackTable: React.FC = () => {
-  const { user } = useAuth();
-  const { socket, gameState, setGameState } = useSocket();
+  const { user, updateChips } = useAuth();
+  const { socket, gameState, setGameState, setGameStarted } = useSocket();
+  const { playChip, playWin, playLose } = useSoundEffects();
   const navigate = useNavigate();
+  
+  const hasEmitted = useRef(false);
+  const [currentBet, setCurrentBet] = useState(100); 
 
-  // Si aún no ha llegado el paquete de estado, mostramos carga
+  const currentUsername = user?.username || localStorage.getItem('casino_username') || 'Jugador';
+  const currentChips = user?.chips ?? 10000;
+
+  useEffect(() => {
+    const me = gameState?.players?.find((p: any) => p.username === currentUsername);
+    const stateStr = String(gameState?.state).toLowerCase();
+    
+    if (stateStr === 'finished' && me?.outcome && !hasEmitted.current) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const matchResult = me.outcome === 'lose' ? 'loss' : me.outcome;
+        
+        socket.send(JSON.stringify({
+          type: 'score_update',
+          username: currentUsername,
+          result: matchResult
+        }));
+
+        if (matchResult === 'win') {
+          playWin();
+          updateChips(currentBet * 2); 
+        } else if (matchResult === 'loss') {
+          playLose();
+          updateChips(-currentBet); 
+        } else if (matchResult === 'tie') {
+          playChip();
+        }
+
+        hasEmitted.current = true;
+      }
+    }
+
+    if (stateStr !== 'finished') {
+      hasEmitted.current = false;
+    }
+  }, [gameState, socket, currentUsername, currentBet, updateChips, playWin, playLose, playChip]);
+
   if (!gameState) {
     return (
       <div className="min-h-screen bg-green-900 flex items-center justify-center text-white font-serif">
@@ -49,29 +86,41 @@ const BlackjackTable: React.FC = () => {
     );
   }
 
-  // Identificamos quién es quién en el array de jugadores que envía el servidor
-  const me = gameState.players.find((p: any) => p.username === user?.username);
-  const opponent = gameState.players.find((p: any) => p.username !== user?.username);
+  const me = gameState.players.find((p: any) => p.username === currentUsername);
+  const opponent = gameState.players.find((p: any) => p.username !== currentUsername);
   
-  // Validamos si los botones de acción deben habilitarse
-  const isMyTurn = gameState.state === 'playing' && gameState.turn_username === user?.username;
+  // Normalizamos el estado para evitar fallos por mayúsculas/minúsculas del backend
+  const stateStr = String(gameState.state).toLowerCase();
+  const isFinished = stateStr === 'finished';
+  
+  // Validación a prueba de fallos: si es tu turno y no ha terminado, mostramos los botones
+  const isMyTurn = !isFinished && gameState.turn_username === currentUsername;
 
-  const handleHit = () => {
-    socket?.send(JSON.stringify({ type: 'hit' }));
-  };
+  const revealOpponent = isFinished || opponent?.status === 'stand' || opponent?.status === 'bust';
 
-  const handleStand = () => {
-    socket?.send(JSON.stringify({ type: 'stand' }));
+  const handleHit = () => socket?.send(JSON.stringify({ type: 'hit' }));
+  const handleStand = () => socket?.send(JSON.stringify({ type: 'stand' }));
+  
+  const addBet = (amount: number) => {
+    if (!isFinished) {
+      playChip();
+      setCurrentBet(prev => prev + amount);
+    }
   };
 
   const leaveTable = () => {
     setGameState(null);
+    setGameStarted(false);
     navigate('/dashboard');
   };
-
   return (
     <div className="min-h-screen bg-green-800 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-green-700 to-green-900 p-6 flex flex-col justify-between text-white font-sans border-[16px] border-yellow-900/80 rounded-3xl m-4 shadow-2xl relative overflow-hidden">
       
+      <div className="absolute top-8 left-8 text-green-200/80 z-10">
+        <p className="font-bold text-lg">{currentUsername}</p>
+        <p>Saldo: ${currentChips}</p>
+      </div>
+
       {/* 1. ÁREA DEL DEALER */}
       <div className="flex flex-col items-center p-2">
         <div className="flex items-center space-x-4 mb-2">
@@ -95,22 +144,22 @@ const BlackjackTable: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. ÁREA DEL OPONENTE (Invitado/Host) */}
+      {/* 2. ÁREA DEL OPONENTE */}
       {opponent && (
         <div className="flex flex-col items-center p-2 opacity-80 scale-90">
           <div className="flex items-center space-x-4 mb-2">
               <h2 className="text-md font-serif text-slate-300/50 tracking-widest uppercase">{opponent.username}</h2>
               <span className={`px-2 py-1 rounded-full font-bold text-sm ${opponent.status === 'bust' ? 'bg-red-500/20 text-red-400' : 'bg-black/40 text-slate-300'}`}>
-                  {opponent.status.toUpperCase()} ({opponent.score})
+                  {opponent.status.toUpperCase()} {revealOpponent ? `(${opponent.score})` : '(?)'}
               </span>
           </div>
           <div className="flex justify-center h-28">
             {opponent.hand.map((card: any, index: number) => (
               <img 
                 key={index}
-                src={getCardImage(card)} 
+                src={revealOpponent ? getCardImage(card) : getCardImage({ ...card, hidden: true })} 
                 alt="Opponent Card"
-                className="w-16 h-24 object-contain -ml-4 first:ml-0 drop-shadow-lg"
+                className="w-16 h-24 object-contain -ml-4 first:ml-0 drop-shadow-lg transition-all"
                 style={{ zIndex: index }}
               />
             ))}
@@ -118,8 +167,8 @@ const BlackjackTable: React.FC = () => {
         </div>
       )}
 
-      {/* RESULTADO CENTRAL (Al terminar la ronda) */}
-      {gameState.state === 'finished' && (
+      {/* RESULTADO CENTRAL */}
+      {isFinished && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-black/90 border-2 border-yellow-500 p-8 rounded-2xl backdrop-blur-md text-center shadow-[0_0_40px_rgba(234,179,8,0.4)]">
               <h2 className="text-3xl font-bold text-yellow-500 mb-2">Partida Finalizada</h2>
               <p className="text-xl text-white mb-6">
@@ -152,16 +201,25 @@ const BlackjackTable: React.FC = () => {
               </span>
           </div>
           
-          {/* Panel de Acciones (Solo visible en tu turno) */}
-          <div className="h-16 flex items-center justify-center">
-            {isMyTurn ? (
-              <div className="flex space-x-4 animate-[fade-in-up_0.3s_ease-out]">
-                <button onClick={handleHit} className="px-8 py-3 rounded-full bg-green-600 text-white font-bold hover:bg-green-500 transition-colors shadow-lg border border-green-400/50">Pedir Carta</button>
-                <button onClick={handleStand} className="px-8 py-3 rounded-full bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-lg border border-red-400/50">Plantarse</button>
-              </div>
-            ) : gameState.state === 'playing' ? (
-              <p className="text-yellow-500 font-bold animate-pulse">Esperando a {gameState.turn_username}...</p>
-            ) : null}
+          <div className="flex flex-col items-center">
+            <p className="text-yellow-500 font-bold mb-2">Apuesta: ${currentBet}</p>
+            
+            <div className="flex space-x-4 mb-4">
+                <button onClick={() => addBet(10)} style={{ backgroundImage: `url(${chip1})` }} className="w-12 h-12 bg-contain bg-center bg-no-repeat hover:-translate-y-1 transition-transform flex items-center justify-center font-bold text-black drop-shadow-md">10</button>
+                <button onClick={() => addBet(100)} style={{ backgroundImage: `url(${chip2})` }} className="w-12 h-12 bg-contain bg-center bg-no-repeat hover:-translate-y-1 transition-transform flex items-center justify-center font-bold text-black drop-shadow-md">100</button>
+                <button onClick={() => addBet(500)} style={{ backgroundImage: `url(${chip3})` }} className="w-12 h-12 bg-contain bg-center bg-no-repeat hover:-translate-y-1 transition-transform flex items-center justify-center font-bold text-black drop-shadow-md">500</button>
+            </div>
+
+            <div className="h-14 flex items-center justify-center w-full">
+              {isMyTurn ? (
+                <div className="flex space-x-4 animate-[fade-in-up_0.3s_ease-out]">
+                  <button onClick={handleHit} className="px-8 py-3 rounded-full bg-green-600 text-white font-bold hover:bg-green-500 transition-colors shadow-lg border border-green-400/50">Pedir Carta</button>
+                  <button onClick={handleStand} className="px-8 py-3 rounded-full bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-lg border border-red-400/50">Plantarse</button>
+                </div>
+              ) : !isFinished ? (
+                <p className="text-yellow-500 font-bold animate-pulse text-lg tracking-wide">Esperando a {gameState.turn_username}...</p>
+              ) : null}
+            </div>
           </div>
         </div>
       )}
