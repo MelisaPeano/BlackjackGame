@@ -93,3 +93,7 @@ class RoomManager:
                     self.user_room.pop(player.username, None)
                 self.active_rooms.pop(room_id, None)
                 await room.close()
+
+    async def leave_game(self, username: str) -> None:
+        "Abandono voluntario"
+        await self.handle_disconnect(username)
