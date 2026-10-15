@@ -88,6 +88,16 @@ class MessageRouter:
             room = await self.rooms.join_matchmaking(username)
             if room is None:
                 await self.connections.send(username, WaitingMsg())
+       
+      # El jugador abandona la partida en curso (pierde y el rival gana)
+        if msg_type == "leave_game":
+            if self.rooms.room_of(username) is None:
+                await self.connections.send(
+                    username,
+                    ErrorMsg(code="NOT_IN_GAME", message="No te encuentras en una partida activa."),
+                )
+            else:
+                await self.rooms.leave_game(username)
             return
 
         # --- NUEVA LÓGICA PARA EL SCOREBOARD ---
