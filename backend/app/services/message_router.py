@@ -11,6 +11,7 @@ from app.models.messages import (
     InviteMsg,
     InviteResponseMsg,
     ScoreUpdateMsg,
+    WaitingMsg,
     client_message_adapter,
 )
 from app.models.player_action_enum import PlayerActionEnum
@@ -74,7 +75,21 @@ class MessageRouter:
                 logger.error("[ROUTER ERROR] Fallo procesando InviteResponseMsg: %s", e)
             return
         
-        # El jugador abandona la partida en curso (pierde y el rival gana)
+        # Partida rápida: el jugador entra a la cola al presionar "Entrar a la Mesa"
+        if msg_type == "join_matchmaking":
+            current_room = self.rooms.room_of(username)
+            if current_room is not None and current_room.game_state.value != "FINISHED":
+                await self.connections.send(
+                    username,
+                    ErrorMsg(code="ALREADY_IN_GAME", message="Ya te encuentras en una partida."),
+                )
+                return
+
+            room = await self.rooms.join_matchmaking(username)
+            if room is None:
+                await self.connections.send(username, WaitingMsg())
+       
+      # El jugador abandona la partida en curso (pierde y el rival gana)
         if msg_type == "leave_game":
             if self.rooms.room_of(username) is None:
                 await self.connections.send(

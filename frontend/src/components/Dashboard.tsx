@@ -14,7 +14,8 @@ const Dashboard: React.FC = () => {
     incomingInvite, 
     respondInvite, 
     gameStarted, 
-    setGameStarted 
+    setGameStarted,
+    joinMatchmaking
   } = useSocket();
 
   // Redirección automática al detectar el inicio del juego
@@ -105,7 +106,10 @@ const Dashboard: React.FC = () => {
         {/* Accesos Rápidos al Juego y Scoreboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <button
-            onClick={() => navigate('/game')}
+            onClick={() => {
+              joinMatchmaking();
+              navigate('/game');
+            }}
             className="group relative overflow-hidden bg-gradient-to-br from-green-700 to-green-900 p-6 rounded-2xl border border-green-500/50 shadow-[0_0_25px_rgba(22,163,74,0.2)] hover:shadow-[0_0_35px_rgba(22,163,74,0.4)] transition-all transform hover:-translate-y-1 flex items-center justify-center space-x-4"
           >
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
