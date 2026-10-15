@@ -21,7 +21,8 @@ const Register: React.FC = () => {
     }
 
    try {
-      const response = await fetch('https://localhost:8000/api/auth/register', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

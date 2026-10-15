@@ -15,7 +15,8 @@ export const useScoreboard = () => {
   useEffect(() => {
     const fetchScoreboard = async () => {
       try {
-        const response = await fetch('https://localhost:8000/api/auth/scoreboard');
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:8000';
+        const response = await fetch(`${apiUrl}/api/auth/scoreboard`);
         if (!response.ok) throw new Error('Error al obtener el ranking del servidor');
         
         const data = await response.json();
