@@ -100,7 +100,12 @@ const BlackjackTable: React.FC = () => {
 
   const handleHit = () => socket?.send(JSON.stringify({ type: 'hit' }));
   const handleStand = () => socket?.send(JSON.stringify({ type: 'stand' }));
-  
+  const handleLeave = () => {
+    if (window.confirm('¿Seguro que quieres abandonar? Perderás la partida.')) {
+      socket?.send(JSON.stringify({ type: 'leave_game' }));
+    }
+  };  
+
   const addBet = (amount: number) => {
     if (!isFinished) {
       playChip();
@@ -120,6 +125,16 @@ const BlackjackTable: React.FC = () => {
         <p className="font-bold text-lg">{currentUsername}</p>
         <p>Saldo: ${currentChips}</p>
       </div>
+
+      {/* Boton abandonar la partida en curso */}
+      {!isFinished && (
+        <button
+          onClick={handleLeave}
+          className="absolute top-8 right-8 z-10 px-4 py-2 text-sm font-bold text-red-200 bg-red-900/60 hover:bg-red-800/80 border border-red-500/50 rounded-lg transition-colors"
+        >
+          Abandonar partida
+        </button>
+      )}
 
       {/* 1. ÁREA DEL DEALER */}
       <div className="flex flex-col items-center p-2">
