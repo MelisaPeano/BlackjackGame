@@ -85,4 +85,14 @@ app.include_router(websocket_router)
 @app.get("/")
 async def root():
     """Ruta raíz para verificación de salud del servidor."""
-    return {"message": "Welcome to the Blackjack Game API"}
+    db_status = "disconnected"
+    if db_manager.db is not None:
+        try:
+            await db_manager.db.command("ping")
+            db_status = "connected"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+    return {
+        "message": "Welcome to the Blackjack Game API",
+        "database": db_status
+    }

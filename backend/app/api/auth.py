@@ -101,3 +101,13 @@ async def get_scoreboard(service: UserService = Depends(get_user_service)):
         for i, user in enumerate(leaderboard)
     ]
     return result
+
+
+@router.delete("/user/{username}")
+async def delete_user(username: str, service: UserService = Depends(get_user_service)):
+    """Endpoint para eliminar usuarios de prueba."""
+    col = service.collection
+    if col is not None:
+        await col.delete_one({"username": {"$regex": f"^{username.strip()}$", "$options": "i"}})
+    service._in_memory_users.pop(username.strip().lower(), None)
+    return {"message": f"Usuario '{username}' eliminado correctamente"}
