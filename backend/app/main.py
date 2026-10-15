@@ -18,19 +18,6 @@ logger = logging.getLogger("blackjack.main")
 
 load_dotenv()
 
-app = FastAPI(title="Blackjack Game API")
-
-# Configuración de CORS
-origins = os.getenv("CORS_ORIGINS", "").split(",")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Inicialización de servicios desacoplados
 event_bus = EventBus()
 connections = ConnectionManager()
@@ -61,10 +48,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Blackjack Game API", lifespan=lifespan)
 
-# Configuración de CORS para permitir peticiones desde el frontend (React / Vite)
+# Configuración de CORS para permitir peticiones desde el frontend (React / Vite en Azure y local)
+allowed_origins = [
+    "https://zealous-ground-097c6b31e.4.azurestaticapps.net",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+]
+custom_origins = [orig.strip() for orig in os.getenv("CORS_ORIGINS", "").split(",") if orig.strip()]
+if custom_origins:
+    allowed_origins.extend(custom_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.azurestaticapps\.net",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
