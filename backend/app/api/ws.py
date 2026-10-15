@@ -3,7 +3,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.core.errors import GameError
 from app.core.security import decode_access_token
-from app.models.messages import ConnectedMsg, LobbyStateMsg, WaitingMsg
+from app.models.messages import ConnectedMsg, LobbyStateMsg
 
 router = APIRouter()
 
@@ -46,12 +46,6 @@ async def websocket_endpoint(
         
         active_users = state.connections.get_online_users()
         await state.connections.broadcast(LobbyStateMsg(online_users=active_users))
-
-        # Intento de emparejamiento / sala de espera
-        room = await state.rooms.join_matchmaking(username)
-
-        if room is None:
-            await state.connections.send(username, WaitingMsg())
 
         # Bucle de escucha de eventos entrantes
         while True:

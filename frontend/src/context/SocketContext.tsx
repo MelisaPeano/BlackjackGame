@@ -11,6 +11,7 @@ interface SocketContextType {
   setGameStarted: (val: boolean) => void;
   gameState: any;
   setGameState: (val: any) => void;
+  joinMatchmaking: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -82,9 +83,16 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     setIncomingInvite(null);
   };
 
+  // Partida rapida. El servidor te pone en cola y te empareja cuando haya otro jugador esperando
+  const joinMatchmaking = () => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'join_matchmaking' }));
+    }
+  };
+
   return (
     <SocketContext.Provider value={{ 
-      socket, onlineUsers, sendInvite, incomingInvite, respondInvite, gameStarted, setGameStarted, gameState, setGameState 
+      socket, onlineUsers, sendInvite, incomingInvite, respondInvite, gameStarted, setGameStarted, gameState, setGameState, joinMatchmaking
     }}>
       {children}
     </SocketContext.Provider>
