@@ -49,13 +49,16 @@ const BlackjackTable: React.FC = () => {
   useEffect(() => {
     const me = gameState?.players?.find((p: any) => p.username === currentUsername);
     const stateStr = String(gameState?.state).toLowerCase();
+    const rawOutcome = me?.outcome ? String(me.outcome).toLowerCase() : '';
     
-    if (stateStr === 'finished' && me?.outcome && !hasEmitted.current) {
+    if (stateStr === 'finished' && rawOutcome && !hasEmitted.current) {
       if (socket && socket.readyState === WebSocket.OPEN) {
-        const matchResult = me.outcome === 'lose' ? 'loss' : me.outcome;
+        const isWin = rawOutcome === 'win';
+        const isLoss = rawOutcome === 'lose' || rawOutcome === 'loss';
+        const isTie = rawOutcome === 'tie' || rawOutcome === 'draw';
         
         let delta = 0;
-        if (matchResult === 'win') {
+        if (isWin) {
           playWin();
           delta = currentBet;
           // Si obtuvo Blackjack natural (21 con 2 cartas), premio 3:2 (+1.5x)
@@ -63,11 +66,11 @@ const BlackjackTable: React.FC = () => {
             delta = Math.floor(currentBet * 1.5);
           }
           updateChips(delta);
-        } else if (matchResult === 'loss') {
+        } else if (isLoss) {
           playLose();
           delta = -currentBet;
           updateChips(delta);
-        } else if (matchResult === 'tie' || matchResult === 'draw') {
+        } else if (isTie) {
           playChip();
           delta = 0;
         }
@@ -75,7 +78,7 @@ const BlackjackTable: React.FC = () => {
         socket.send(JSON.stringify({
           type: 'score_update',
           username: currentUsername,
-          result: matchResult === 'draw' ? 'tie' : matchResult,
+          result: isWin ? 'win' : isLoss ? 'loss' : 'tie',
           chips_delta: delta
         }));
 
@@ -149,12 +152,39 @@ const BlackjackTable: React.FC = () => {
     navigate('/dashboard');
   };
 
-  // Cálculo detallado de quién ganó la mesa
+  // Cálculo detallado y robusto de los resultados de cada jugador
   const dealerScore = gameState?.dealer?.score;
-  const meWin = me?.outcome === 'win';
-  const oppWin = opponent?.outcome === 'win';
-  const meTie = me?.outcome === 'draw' || me?.outcome === 'tie';
-  const oppTie = opponent?.outcome === 'draw' || opponent?.outcome === 'tie';
+  const isDealerBust = dealerScore !== undefined && dealerScore > 21;
+
+  const determineOutcome = (p: any): 'win' | 'lose' | 'tie' => {
+    if (!p) return 'lose';
+    const raw = p.outcome ? String(p.outcome).toLowerCase().trim() : '';
+    if (raw === 'win') return 'win';
+    if (raw === 'lose' || raw === 'loss') return 'lose';
+    if (raw === 'tie' || raw === 'draw') return 'tie';
+    
+    // Reglas oficiales de Blackjack de respaldo según puntajes
+    const pScore = p.score ?? 0;
+    if (pScore > 21) return 'lose';
+    if (isDealerBust) return 'win';
+    if (dealerScore !== undefined) {
+      if (pScore > dealerScore) return 'win';
+      if (pScore < dealerScore) return 'lose';
+      return 'tie';
+    }
+    return 'lose';
+  };
+
+  const myOutcome = determineOutcome(me);
+  const oppOutcome = determineOutcome(opponent);
+
+  const meWin = myOutcome === 'win';
+  const meLose = myOutcome === 'lose';
+  const meTie = myOutcome === 'tie';
+
+  const oppWin = oppOutcome === 'win';
+  const oppLose = oppOutcome === 'lose';
+  const oppTie = oppOutcome === 'tie';
 
   let headlineIcon = '🏆';
   let headlineTitle = 'Partida Finalizada';
@@ -167,11 +197,15 @@ const BlackjackTable: React.FC = () => {
   } else if (meWin && !oppWin) {
     headlineIcon = '🥇';
     headlineTitle = `¡${currentUsername} Ganó la Mesa!`;
-    headlineSub = `Venciste al Dealer con ${me?.score ?? 0} puntos`;
+    headlineSub = isDealerBust 
+      ? `El Dealer se pasó con ${dealerScore} pts. ¡Tú ganas con ${me?.score ?? 0} pts!`
+      : `Venciste al Dealer (${dealerScore} pts) con ${me?.score ?? 0} puntos`;
   } else if (!meWin && oppWin) {
     headlineIcon = '🥈';
     headlineTitle = `¡${opponent?.username} Ganó la Mesa!`;
-    headlineSub = `${opponent?.username} venció al Dealer con ${opponent?.score ?? 0} puntos`;
+    headlineSub = isDealerBust 
+      ? `El Dealer se pasó con ${dealerScore} pts. ¡${opponent?.username} gana con ${opponent?.score ?? 0} pts!`
+      : `${opponent?.username} venció al Dealer con ${opponent?.score ?? 0} puntos`;
   } else if (meTie || oppTie) {
     headlineIcon = '🤝';
     headlineTitle = '¡Empate con la Casa!';
@@ -287,16 +321,16 @@ const BlackjackTable: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
-                    me?.outcome === 'win'
+                    meWin
                       ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                      : me?.outcome === 'lose'
+                      : meLose
                       ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                       : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                   }`}>
-                    {me?.outcome === 'win' 
-                      ? `¡GANASTE! (+ $${me.score === 21 && me.hand?.length === 2 ? Math.floor(currentBet * 1.5) : currentBet})` 
-                      : me?.outcome === 'lose' 
-                      ? `PERDISTE (- $${currentBet})` 
+                    {meWin 
+                      ? `¡GANASTE! (+ $${me?.score === 21 && me?.hand?.length === 2 ? Math.floor(currentBet * 1.5) : currentBet})` 
+                      : meLose 
+                      ? (me?.score && me.score > 21 ? `PERDISTE (SE PASÓ) (- $${currentBet})` : `PERDISTE (- $${currentBet})`)
                       : 'EMPATE ($0)'}
                   </span>
                 </div>
@@ -311,13 +345,17 @@ const BlackjackTable: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
-                      opponent.outcome === 'win'
+                      oppWin
                         ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        : opponent.outcome === 'lose'
+                        : oppLose
                         ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                         : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
                     }`}>
-                      {opponent.outcome === 'win' ? '¡GANÓ! 🏆' : opponent.outcome === 'lose' ? 'PERDIÓ ❌' : 'EMPATE 🤝'}
+                      {oppWin 
+                        ? '¡GANÓ! 🏆' 
+                        : oppLose 
+                        ? (opponent?.score && opponent.score > 21 ? 'PERDIÓ (SE PASÓ) ❌' : 'PERDIÓ ❌') 
+                        : 'EMPATE 🤝'}
                     </span>
                   </div>
                 </div>
