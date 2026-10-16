@@ -64,4 +64,3 @@ jobs:
           app-name: 'BlackJackGame'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_0EE55519F57D45D8AEB693AF1E49BEA8 }}
-          startup-command: 'python -m uvicorn main:app --host 0.0.0.0 --port 8000'
