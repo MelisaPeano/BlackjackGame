@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.core.errors import GameError
@@ -229,6 +230,24 @@ class GameRoom:
 
         await self.broadcast_state()
 
+        # Guardar automáticamente los resultados en MongoDB (Scoreboard e Historial)
+        user_service = UserService()
+        match_record = {
+            "room_id": self.room_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "dealer_score": self.dealer_hand.get_score(),
+            "players": []
+        }
+        for player in self.players:
+            res_outcome = self.results.get(player.username, "lose")
+            await user_service.record_match_result(player.username, res_outcome)
+            match_record["players"].append({
+                "username": player.username,
+                "score": player.get_hand().get_score(),
+                "outcome": res_outcome
+            })
+        await user_service.save_match_history(match_record)
+
         # Notificar finalización de la ronda al EventBus
         if self.event_bus:
             self.event_bus.publish(RoundEnded(room_id=self.room_id, results=self.results))
@@ -253,6 +272,27 @@ class GameRoom:
                         self.results[player.username] = OutcomeEnum.WIN.value
 
                 await self.broadcast_state()
+
+                # Guardar resultados y victoria del jugador restante
+                user_service = UserService()
+                for player in self.players:
+                    await user_service.record_match_result(player.username, self.results[player.username])
+
+                match_record = {
+                    "room_id": self.room_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "dealer_score": 0,
+                    "players": [
+                        {
+                            "username": p.username,
+                            "score": p.get_hand().get_score(),
+                            "outcome": self.results.get(p.username, "lose")
+                        }
+                        for p in self.players
+                    ]
+                }
+                await user_service.save_match_history(match_record)
+
                 if self.event_bus:
                     self.event_bus.publish(RoundEnded(room_id=self.room_id, results=self.results))
 

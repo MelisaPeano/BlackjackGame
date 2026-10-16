@@ -127,3 +127,28 @@ async def test_get_me_authenticated():
         # Petición sin token debe retornar 401 Unauthorized
         unauth_res = await ac.get("/api/auth/me")
         assert unauth_res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_scoreboard_and_history():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # Scoreboard
+        sb_res = await ac.get("/api/auth/scoreboard")
+        assert sb_res.status_code == 200
+        sb_data = sb_res.json()
+        assert isinstance(sb_data, list)
+        if len(sb_data) > 0:
+            first = sb_data[0]
+            assert "username" in first
+            assert "wins" in first
+            assert "losses" in first
+            assert "ties" in first
+            assert "chips" in first
+            assert "score" in first
+
+        # History
+        hist_res = await ac.get("/api/auth/history")
+        assert hist_res.status_code == 200
+        hist_data = hist_res.json()
+        assert isinstance(hist_data, list)
+

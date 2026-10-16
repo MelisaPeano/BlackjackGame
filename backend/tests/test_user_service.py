@@ -61,3 +61,31 @@ async def test_update_chips():
     # Disminuir saldo de fichas
     new_balance = await service.update_chips("chip_master", -2000)
     assert new_balance == 8500
+
+
+@pytest.mark.asyncio
+async def test_record_match_result_and_leaderboard():
+    service = UserService()
+    user1 = await service.register_user(UserRegisterRequest(username="player_winner", password="password123"))
+    user2 = await service.register_user(UserRegisterRequest(username="player_loser", password="password123"))
+
+    # Registrar victoria para player_winner (+3 puntos)
+    await service.record_match_result("player_winner", "win")
+    # Registrar derrota para player_loser (+0 puntos)
+    await service.record_match_result("player_loser", "lose")
+    # Registrar empate para player_winner (+1 punto)
+    await service.record_match_result("player_winner", "draw")
+
+    leaderboard = await service.get_leaderboard(limit=5)
+    pw = next((u for u in leaderboard if u["username"] == "player_winner"), None)
+    pl = next((u for u in leaderboard if u["username"] == "player_loser"), None)
+
+    assert pw is not None
+    assert pw["wins"] == 1
+    assert pw["ties"] == 1
+    assert pw["score"] == 4
+
+    assert pl is not None
+    assert pl["losses"] == 1
+    assert pl["score"] == 0
+

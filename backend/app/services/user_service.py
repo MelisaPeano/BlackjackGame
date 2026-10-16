@@ -154,22 +154,27 @@ class UserService:
         return UserResponse(**dto)
 
     async def get_leaderboard(self, limit: int = 10) -> list[dict[str, Any]]:
-        """Recupera los mejores jugadores ordenados por victorias y empates."""
+        """Recupera los mejores jugadores ordenados por puntaje, victorias y saldo de fichas."""
         col = self.collection
         if col is not None:
             try:
                 cursor = col.find(
                     {},
-                    {"_id": 1, "username": 1, "wins": 1, "ties": 1, "score": 1}
-                ).sort([("wins", -1), ("ties", -1)]).limit(limit)
+                    {"_id": 1, "username": 1, "wins": 1, "losses": 1, "ties": 1, "chips": 1, "score": 1}
+                ).sort([("wins", -1), ("score", -1), ("chips", -1)]).limit(limit)
                 
                 docs = await cursor.to_list(length=limit)
                 
                 for doc in docs:
                     doc["wins"] = doc.get("wins", 0)
+                    doc["losses"] = doc.get("losses", 0)
                     doc["ties"] = doc.get("ties", 0)
-                    doc["score"] = doc.get("score", doc["wins"] * 3 + doc["ties"]) 
+                    doc["chips"] = doc.get("chips", 10000)
+                    calc_score = doc["wins"] * 3 + doc["ties"]
+                    doc["score"] = doc.get("score") if (doc.get("score") is not None and doc.get("score") > 0) else calc_score
                     doc["_id"] = str(doc["_id"])
+
+                docs.sort(key=lambda x: (x.get("score", 0), x.get("wins", 0), x.get("chips", 0)), reverse=True)
                 return docs
             except PyMongoError as err:
                 logger.warning("MongoDB no disponible (%s). Usando fallback en memoria.", err)
@@ -177,26 +182,36 @@ class UserService:
         users = list(self._in_memory_users.values())
         for u in users:
             u["wins"] = u.get("wins", 0)
+            u["losses"] = u.get("losses", 0)
             u["ties"] = u.get("ties", 0)
-            u["score"] = u.get("score", u["wins"] * 3 + u["ties"])
+            u["chips"] = u.get("chips", 10000)
+            calc_score = u["wins"] * 3 + u["ties"]
+            u["score"] = u.get("score") if (u.get("score") is not None and u.get("score") > 0) else calc_score
             
-        users.sort(key=lambda x: (x.get("wins", 0), x.get("ties", 0)), reverse=True)
+        users.sort(key=lambda x: (x.get("score", 0), x.get("wins", 0), x.get("chips", 0)), reverse=True)
         return users[:limit]
 
     async def record_match_result(self, username: str, result: str):
-        """Suma +1 a victorias o empates al finalizar una partida."""
+        """Suma +1 a victorias, derrotas o empates al finalizar una partida y actualiza el puntaje."""
         normalized_username = sanitize_username(username)
         col = self.collection
 
-        # Si el resultado es derrota (loss), no sumamos nada al ranking
-        if result not in ["win", "tie"]:
-            return
+        res_str = result.lower().strip()
+        if res_str in ("win", "victoria"):
+            field = "wins"
+            score_inc = 3
+        elif res_str in ("loss", "lose", "derrota"):
+            field = "losses"
+            score_inc = 0
+        else: # tie, draw, empate
+            field = "ties"
+            score_inc = 1
 
         if col is not None:
             try:
                 await col.update_one(
                     {"username": {"$regex": f"^{normalized_username}$", "$options": "i"}},
-                    {"$inc": {f"{result}s": 1}} # Incrementa "wins" o "ties"
+                    {"$inc": {field: 1, "score": score_inc}}
                 )
             except PyMongoError as err:
                 logger.warning("MongoDB no disponible al registrar resultado: %s", err)
@@ -204,5 +219,29 @@ class UserService:
         # Fallback en memoria
         user = self._in_memory_users.get(normalized_username.lower())
         if user:
-            field = f"{result}s"
             user[field] = user.get(field, 0) + 1
+            user["score"] = user.get("score", 0) + score_inc
+
+    async def save_match_history(self, match_data: dict[str, Any]) -> None:
+        """Persiste el registro histórico de la partida en la colección 'matches' de MongoDB."""
+        db = get_database()
+        if db is not None:
+            try:
+                await db.matches.insert_one(match_data)
+                logger.info("Partida %s registrada en historial de MongoDB.", match_data.get("room_id"))
+            except Exception as e:
+                logger.warning("No se pudo registrar historial de partida: %s", e)
+
+    async def get_match_history(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Recupera el historial de las últimas partidas registradas en MongoDB."""
+        db = get_database()
+        if db is not None:
+            try:
+                cursor = db.matches.find().sort([("_id", -1)]).limit(limit)
+                docs = await cursor.to_list(length=limit)
+                for doc in docs:
+                    doc["_id"] = str(doc["_id"])
+                return docs
+            except Exception as e:
+                logger.warning("Error al consultar historial de partidas: %s", e)
+        return []

@@ -113,9 +113,7 @@ class MessageRouter:
                 # Validación de seguridad: el socket solo puede actualizar su propio puntaje
                 if username == score_msg.username:
                     user_service = UserService()
-                    await user_service.record_match_result(username, score_msg.result)
-
-                    # Persistir suma o resta de apuestas en la base de datos
+                    # Persistir suma o resta de apuestas en la base de datos (el resultado y victorias ya fueron guardados por GameRoom)
                     chips_delta = getattr(score_msg, "chips_delta", 0) or data.get("chips_delta", 0)
                     if isinstance(chips_delta, int) and chips_delta != 0:
                         try:

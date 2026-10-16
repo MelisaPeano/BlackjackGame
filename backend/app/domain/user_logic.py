@@ -29,6 +29,10 @@ def build_user_record(
         "email": email.strip() if email else None,
         "chips": initial_chips,
         "role": role,
+        "wins": 0,
+        "losses": 0,
+        "ties": 0,
+        "score": 0,
         "created_at": datetime.now(timezone.utc),
     }
 

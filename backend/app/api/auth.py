@@ -95,12 +95,21 @@ async def get_scoreboard(service: UserService = Depends(get_user_service)):
             "id": str(user.get("_id", i)),
             "username": user.get("username", "Jugador Desconocido"),
             "wins": user.get("wins", 0),
+            "losses": user.get("losses", 0),
             "ties": user.get("ties", 0),
+            "chips": user.get("chips", 10000),
             "score": user.get("score", 0)
         }
         for i, user in enumerate(leaderboard)
     ]
     return result
+
+
+@router.get("/history")
+async def get_history(service: UserService = Depends(get_user_service)):
+    """Endpoint público: Retorna el historial de partidas recientes registradas en la base de datos."""
+    return await service.get_match_history(limit=20)
+
 
 
 @router.delete("/user/{username}")
