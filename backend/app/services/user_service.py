@@ -161,9 +161,8 @@ class UserService:
                 cursor = col.find(
                     {},
                     {"_id": 1, "username": 1, "wins": 1, "losses": 1, "ties": 1, "chips": 1, "score": 1}
-                ).sort([("wins", -1), ("score", -1), ("chips", -1)]).limit(limit)
-                
-                docs = await cursor.to_list(length=limit)
+                )
+                docs = await cursor.to_list(length=100)
                 
                 for doc in docs:
                     doc["wins"] = doc.get("wins", 0)
@@ -175,9 +174,9 @@ class UserService:
                     doc["_id"] = str(doc["_id"])
 
                 docs.sort(key=lambda x: (x.get("score", 0), x.get("wins", 0), x.get("chips", 0)), reverse=True)
-                return docs
-            except PyMongoError as err:
-                logger.warning("MongoDB no disponible (%s). Usando fallback en memoria.", err)
+                return docs[:limit]
+            except Exception as err:
+                logger.warning("MongoDB error al consultar ranking (%s). Usando fallback en memoria.", err)
 
         users = list(self._in_memory_users.values())
         for u in users:
@@ -237,11 +236,12 @@ class UserService:
         db = get_database()
         if db is not None:
             try:
-                cursor = db.matches.find().sort([("_id", -1)]).limit(limit)
-                docs = await cursor.to_list(length=limit)
+                cursor = db.matches.find()
+                docs = await cursor.to_list(length=50)
                 for doc in docs:
                     doc["_id"] = str(doc["_id"])
-                return docs
+                docs.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+                return docs[:limit]
             except Exception as e:
                 logger.warning("Error al consultar historial de partidas: %s", e)
         return []
