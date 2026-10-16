@@ -96,3 +96,14 @@ async def root():
         "message": "Welcome to the Blackjack Game API",
         "database": db_status
     }
+
+
+@app.get("/api/stats")
+async def get_stats():
+    """Retorna estadísticas en tiempo real del lobby y partidas activas."""
+    return {
+        "online_users": len(connections.get_online_users()),
+        "active_games": rooms.get_active_games_count(),
+        "server_status": "ONLINE",
+        "protocol": "WSS / TLS (Azure)"
+    }

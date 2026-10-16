@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
-import { Users, Gamepad2, Server, Activity, LogOut, Play, Trophy, UserCircle2 } from 'lucide-react';
+import { Users, Gamepad2, Server, LogOut, Play, Trophy, UserCircle2, ShieldCheck, Clock } from 'lucide-react';
 import cardBack from '../assets/images/blackjack/card_back.png';
 
 const Dashboard: React.FC = () => {
@@ -10,6 +10,7 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const { 
     onlineUsers, 
+    activeGames,
     sendInvite, 
     incomingInvite, 
     respondInvite, 
@@ -18,20 +19,33 @@ const Dashboard: React.FC = () => {
     joinMatchmaking
   } = useSocket();
 
+  const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
+
   // Redirección automática al detectar el inicio del juego
   useEffect(() => {
     if (gameStarted) {
       setGameStarted(false); // Reseteamos la bandera
+      setInvitedUsers([]);
       navigate('/game');
     }
   }, [gameStarted, navigate, setGameStarted]);
 
-  // Métricas simuladas temporales hasta que Dev 2 conecte la base de datos
+  // Manejo de invitaciones con estado de cancelación
+  const handleToggleInvite = (target: string) => {
+    if (invitedUsers.includes(target)) {
+      setInvitedUsers(prev => prev.filter(u => u !== target));
+    } else {
+      sendInvite(target);
+      setInvitedUsers(prev => [...prev, target]);
+    }
+  };
+
+  // Métricas dinámicas en tiempo real conectadas al backend
   const stats = {
-    onlineUsers: onlineUsers.length + 1, // +1 para contarte a ti mismo
-    activeGames: 2,
+    onlineUsers: Math.max(1, onlineUsers.length + 1), // +1 para contarte a ti mismo
+    activeGames: activeGames ?? 0,
     serverStatus: 'ONLINE',
-    cpuUsage: '14%'
+    securityStatus: 'WSS / TLS (Azure)'
   };
 
   const handleLogout = () => {
@@ -157,10 +171,11 @@ const Dashboard: React.FC = () => {
 
           <div className="bg-slate-800/80 backdrop-blur-md p-6 rounded-2xl border border-yellow-500/30 shadow-[0_0_15px_rgba(212,175,55,0.05)]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-400 text-sm font-medium">Uso de CPU (Redis)</h3>
-              <Activity className="w-5 h-5 text-yellow-500/80" />
+              <h3 className="text-slate-400 text-sm font-medium">Cifrado de Red</h3>
+              <ShieldCheck className="w-5 h-5 text-yellow-500/80" />
             </div>
-            <p className="text-3xl font-bold text-white">{stats.cpuUsage}</p>
+            <p className="text-xl font-bold text-yellow-400 mt-2">{stats.securityStatus}</p>
+            <p className="text-xs text-slate-400 mt-1">WebSockets Azure Activo</p>
           </div>
         </div>
 
@@ -174,20 +189,33 @@ const Dashboard: React.FC = () => {
               <p className="text-slate-400 text-center py-4">Esperando contrincantes...</p>
             ) : (
               <ul className="space-y-3">
-                {filteredUsers.map(onlineUser => (
-                  <li key={onlineUser} className="flex justify-between items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700 hover:bg-slate-700/50 transition-colors text-white">
-                    <div className="flex items-center space-x-3">
-                        <UserCircle2 className="w-5 h-5 text-yellow-500/70" />
-                        <span className="font-medium">{onlineUser}</span>
-                    </div>
-                    <button 
-                      onClick={() => sendInvite(onlineUser)}
-                      className="bg-yellow-600 hover:bg-yellow-500 text-slate-900 px-4 py-1.5 rounded-md text-sm font-bold shadow-md transition-colors"
-                    >
-                      Invitar a Mesa
-                    </button>
-                  </li>
-                ))}
+                {filteredUsers.map(onlineUser => {
+                  const isInvited = invitedUsers.includes(onlineUser);
+                  return (
+                    <li key={onlineUser} className="flex justify-between items-center bg-slate-800/50 p-3 rounded-lg border border-slate-700 hover:bg-slate-700/50 transition-colors text-white">
+                      <div className="flex items-center space-x-3">
+                          <UserCircle2 className="w-5 h-5 text-yellow-500/70" />
+                          <span className="font-medium">{onlineUser}</span>
+                      </div>
+                      {isInvited ? (
+                        <button 
+                          onClick={() => handleToggleInvite(onlineUser)}
+                          className="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-500/40 px-4 py-1.5 rounded-md text-sm font-bold shadow-md transition-all flex items-center space-x-1.5 animate-pulse"
+                        >
+                          <Clock className="w-4 h-4 text-yellow-400" />
+                          <span>Cancelar Solicitud</span>
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => handleToggleInvite(onlineUser)}
+                          className="bg-yellow-600 hover:bg-yellow-500 text-slate-900 px-4 py-1.5 rounded-md text-sm font-bold shadow-md transition-colors"
+                        >
+                          Invitar a Mesa
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

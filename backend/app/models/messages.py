@@ -11,10 +11,11 @@ class StandMsg(BaseModel):
     type: Literal["stand"]
 
 class ScoreUpdateMsg(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     type: Literal["score_update"]
     username: str
     result: Literal["win", "loss", "tie"]
+    chips_delta: int = 0
 
 ClientMessage = Annotated[HitMsg | StandMsg | ScoreUpdateMsg, Field(discriminator="type")]
 client_message_adapter = TypeAdapter(ClientMessage)
@@ -40,6 +41,12 @@ class ErrorMsg(BaseModel):
 class LobbyStateMsg(BaseModel):
     type: str = "lobby_state"
     online_users: list[str]
+    active_games: int = 0
+
+class ChipsUpdatedMsg(BaseModel):
+    type: Literal["chips_updated"] = "chips_updated"
+    chips: int
+    delta: int = 0
 
 class InviteMsg(BaseModel):
     """Payload para enviar una invitación de partida."""

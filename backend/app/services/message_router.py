@@ -100,7 +100,12 @@ class MessageRouter:
                 await self.rooms.leave_game(username)
             return
 
-        # --- NUEVA LÓGICA PARA EL SCOREBOARD ---
+        # El jugador regresa al lobby tras finalizar la partida
+        if msg_type == "leave_table":
+            await self.rooms.leave_table(username)
+            return
+
+        # --- LÓGICA PARA EL SCOREBOARD Y PERSISTENCIA DE APUESTAS / FICHAS ---
         if msg_type == "score_update":
             try:
                 score_msg = ScoreUpdateMsg(**data)
@@ -109,13 +114,25 @@ class MessageRouter:
                 if username == score_msg.username:
                     user_service = UserService()
                     await user_service.record_match_result(username, score_msg.result)
+
+                    # Persistir suma o resta de apuestas en la base de datos
+                    chips_delta = getattr(score_msg, "chips_delta", 0) or data.get("chips_delta", 0)
+                    if isinstance(chips_delta, int) and chips_delta != 0:
+                        try:
+                            new_chips = await user_service.update_chips(username, chips_delta)
+                            await self.connections.send(
+                                username,
+                                {"type": "chips_updated", "chips": new_chips, "delta": chips_delta}
+                            )
+                        except Exception as chip_err:
+                            logger.warning("Fallo al actualizar saldo de fichas para %s: %s", username, chip_err)
                 else:
                     logger.error("[ROUTER ERROR] Alerta: %s intentó modificar puntaje de %s", username, score_msg.username)
                     
             except Exception as e:
                 logger.error("[ROUTER ERROR] Fallo procesando score_update: %s", e)
             return
-        # ---------------------------------------
+        # ------------------------------------------------------------------
 
         # 2. Validación estricta del esquema de jugadas de la mesa (hit, stand)
         try:

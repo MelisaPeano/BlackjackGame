@@ -78,7 +78,31 @@ class RoomManager:
 
         # Iniciar la partida (mezclar y repartir cartas)
         await room.start_game()
+        # Notificar al lobby que inició una partida
+        await self.broadcast_lobby_state()
         return room
+
+    def get_active_games_count(self) -> int:
+        """Retorna el número de partidas en curso (no finalizadas)."""
+        return sum(1 for room in self.active_rooms.values() if room.game_state.value != "FINISHED")
+
+    async def broadcast_lobby_state(self) -> None:
+        """Difunde el estado del lobby con conteo de usuarios y partidas en vivo."""
+        from app.models.messages import LobbyStateMsg
+        active_games = self.get_active_games_count()
+        active_users = self.connections.get_online_users()
+        await self.connections.broadcast(LobbyStateMsg(online_users=active_users, active_games=active_games))
+
+    async def leave_table(self, username: str) -> None:
+        """Limpia la sala cuando un jugador regresa al lobby tras terminar la partida."""
+        room = self.room_of(username)
+        if room:
+            room_id = room.room_id
+            self.user_room.pop(username, None)
+            if room.game_state.value == "FINISHED" or not any(self.user_room.get(p.username) == room_id for p in room.players):
+                self.active_rooms.pop(room_id, None)
+                await room.close()
+        await self.broadcast_lobby_state()
 
     async def handle_disconnect(self, username: str) -> None:
         """Maneja la desconexión de un usuario limpiando colas o declarando abandono."""
@@ -93,6 +117,7 @@ class RoomManager:
                     self.user_room.pop(player.username, None)
                 self.active_rooms.pop(room_id, None)
                 await room.close()
+        await self.broadcast_lobby_state()
 
     async def leave_game(self, username: str) -> None:
         "Abandono voluntario"

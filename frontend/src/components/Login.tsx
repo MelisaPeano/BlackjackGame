@@ -31,8 +31,8 @@ const Login: React.FC = () => {
         throw new Error(data.detail || 'Credenciales inválidas');
       }
 
-      // Pasamos el username y el token real devuelto por el backend
-      login(username, data.access_token);
+      // Pasamos el username, el token real y el saldo de fichas provisto por la base de datos
+      login(username, data.access_token, data.user?.chips ?? 10000);
       navigate('/dashboard');
       
     } catch (err: any) {
