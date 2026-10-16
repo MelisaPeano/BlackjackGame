@@ -7,7 +7,8 @@ dev:
 	uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 prod:
-	uvicorn app.main:app --workers 4 --host 0.0.0.0 --port 8000
+	# Keep one worker: socket and room state is in-process memory.
+	uvicorn app.main:app --workers 1 --host 0.0.0.0 --port 8000
 
 test:
 	pytest

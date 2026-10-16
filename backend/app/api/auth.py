@@ -2,6 +2,7 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from app.core.errors import GameError
+from app.core.events import UserLoggedIn
 from app.core.security import create_access_token, decode_access_token
 from app.models.user import TokenResponse, UserLoginRequest, UserRegisterRequest, UserResponse
 from app.services.user_service import UserService
@@ -67,6 +68,7 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
+    request: Request,
     login_in: UserLoginRequest,
     service: UserService = Depends(get_user_service),
 ):
@@ -75,6 +77,10 @@ async def login(
         user = await service.authenticate_user(login_in)
     except GameError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=e.message)
+
+    event_bus = getattr(request.app.state, "event_bus", None)
+    if event_bus is not None:
+        event_bus.publish(UserLoggedIn(username=user.username))
 
     token = create_access_token(data={"sub": user.username, "role": user.role})
     return TokenResponse(access_token=token, token_type="bearer", user=user)

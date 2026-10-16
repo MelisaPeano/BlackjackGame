@@ -17,7 +17,6 @@ from app.models.messages import (
 from app.models.player_action_enum import PlayerActionEnum
 from app.services.connection_manager import ConnectionManager
 from app.services.room_manager import RoomManager
-from app.services.user_service import UserService
 
 logger = logging.getLogger("blackjack.message_router")
 
@@ -88,8 +87,9 @@ class MessageRouter:
             room = await self.rooms.join_matchmaking(username)
             if room is None:
                 await self.connections.send(username, WaitingMsg())
-       
-      # El jugador abandona la partida en curso (pierde y el rival gana)
+            return
+
+        # El jugador abandona la partida en curso (pierde y el rival gana)
         if msg_type == "leave_game":
             if self.rooms.room_of(username) is None:
                 await self.connections.send(
@@ -100,22 +100,20 @@ class MessageRouter:
                 await self.rooms.leave_game(username)
             return
 
-        # --- NUEVA LÓGICA PARA EL SCOREBOARD ---
         if msg_type == "score_update":
             try:
                 score_msg = ScoreUpdateMsg(**data)
-                
-                # Validación de seguridad: el socket solo puede actualizar su propio puntaje
-                if username == score_msg.username:
-                    user_service = UserService()
-                    await user_service.record_match_result(username, score_msg.result)
+                if username != score_msg.username:
+                    logger.warning(
+                        "El usuario %s intentó reportar un resultado para %s",
+                        username,
+                        score_msg.username,
+                    )
                 else:
-                    logger.error("[ROUTER ERROR] Alerta: %s intentó modificar puntaje de %s", username, score_msg.username)
-                    
-            except Exception as e:
+                    logger.info("Se ignoró score_update del cliente; el resultado lo registra el servidor.")
+            except ValidationError as e:
                 logger.error("[ROUTER ERROR] Fallo procesando score_update: %s", e)
             return
-        # ---------------------------------------
 
         # 2. Validación estricta del esquema de jugadas de la mesa (hit, stand)
         try:

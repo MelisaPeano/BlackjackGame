@@ -1,5 +1,5 @@
 from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 # Client -> Server
 class HitMsg(BaseModel):
@@ -15,6 +15,21 @@ class ScoreUpdateMsg(BaseModel):
     type: Literal["score_update"]
     username: str
     result: Literal["win", "loss", "tie"]
+
+    @field_validator("result", mode="before")
+    @classmethod
+    def normalize_result(cls, value: object) -> str:
+        normalized = str(value).strip().lower()
+        aliases = {
+            "win": "win",
+            "loss": "loss",
+            "lose": "loss",
+            "tie": "tie",
+            "draw": "tie",
+        }
+        if normalized not in aliases:
+            raise ValueError("Resultado de partida inválido.")
+        return aliases[normalized]
 
 ClientMessage = Annotated[HitMsg | StandMsg | ScoreUpdateMsg, Field(discriminator="type")]
 client_message_adapter = TypeAdapter(ClientMessage)

@@ -2,6 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.core.errors import GameError
+from app.core.events import PlayerDisconnected
 from app.core.security import decode_access_token
 from app.models.messages import ConnectedMsg, LobbyStateMsg
 
@@ -57,8 +58,17 @@ async def websocket_endpoint(
 
     finally:
         # Limpieza de recursos al desconectarse el socket
+        room = state.rooms.room_of(username)
         await state.rooms.handle_disconnect(username)
         state.connections.disconnect(username, websocket)
+
+        if state.event_bus:
+            state.event_bus.publish(
+                PlayerDisconnected(
+                    username=username,
+                    room_id=room.room_id if room is not None else None,
+                )
+            )
 
         active_users = state.connections.get_online_users()
         await state.connections.broadcast(LobbyStateMsg(online_users=active_users))

@@ -50,27 +50,21 @@ const BlackjackTable: React.FC = () => {
     const stateStr = String(gameState?.state).toLowerCase();
     
     if (stateStr === 'finished' && me?.outcome && !hasEmitted.current) {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        const matchResult = me.outcome === 'lose' ? 'loss' : me.outcome;
-        
-        socket.send(JSON.stringify({
-          type: 'score_update',
-          username: currentUsername,
-          result: matchResult
-        }));
+      const matchResult = me.outcome.toLowerCase() === 'lose'
+        ? 'loss'
+        : me.outcome.toLowerCase();
 
-        if (matchResult === 'win') {
-          playWin();
-          updateChips(currentBet * 2); 
-        } else if (matchResult === 'loss') {
-          playLose();
-          updateChips(-currentBet); 
-        } else if (matchResult === 'tie') {
-          playChip();
-        }
-
-        hasEmitted.current = true;
+      if (matchResult === 'win') {
+        playWin();
+        updateChips(currentBet * 2);
+      } else if (matchResult === 'loss') {
+        playLose();
+        updateChips(-currentBet);
+      } else if (matchResult === 'tie' || matchResult === 'draw') {
+        playChip();
       }
+
+      hasEmitted.current = true;
     }
 
     if (stateStr !== 'finished') {

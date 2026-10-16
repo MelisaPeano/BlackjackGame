@@ -22,6 +22,17 @@ class PlayerActionSubmitted(BaseEvent):
     action: str  # "hit" | "stand"
 
 
+class UserLoggedIn(BaseEvent):
+    event_type: str = "user_login"
+    username: str
+
+
+class GameStarted(BaseEvent):
+    event_type: str = "game_started"
+    room_id: str
+    usernames: list[str]
+
+
 class GameStateUpdated(BaseEvent):
     """
     Evento emitido cuando el estado de una partida cambia (reparto, jugada, turno del dealer).
@@ -49,3 +60,9 @@ class PlayerLeftEvent(BaseEvent):
     event_type: str = "player_left"
     room_id: str
     username: str
+
+
+class PlayerDisconnected(BaseEvent):
+    event_type: str = "player_disconnected"
+    username: str
+    room_id: Optional[str] = None

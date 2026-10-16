@@ -23,10 +23,9 @@ def test_websocket_connect_with_invalid_token():
             pass
 
 
-def test_websocket_connect_with_username_fallback():
-    # Conexión WebSocket permitida con nombre de usuario en query (?username=...) por compatibilidad
+def test_websocket_requires_jwt_token():
+    # No se permite el antiguo fallback por nombre de usuario sin credenciales.
     client = TestClient(app)
-    with client.websocket_connect("/ws?username=legacy_player") as websocket:
-        data = websocket.receive_json()
-        assert data["type"] == "connected"
-        assert data["username"] == "legacy_player"
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws?username=legacy_player"):
+            pass

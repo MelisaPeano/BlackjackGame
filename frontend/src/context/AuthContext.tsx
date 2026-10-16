@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, type ReactNode } from 'react';
+import { createContext, useState, useContext, type ReactNode } from 'react';
 
 interface User {
   id: string;
@@ -9,7 +9,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string) => void;
+  login: (username: string, token: string) => void;
   logout: () => void;
   updateChips: (amount: number) => void; // <-- Nueva función
 }
