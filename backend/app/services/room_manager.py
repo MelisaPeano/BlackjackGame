@@ -4,6 +4,7 @@ import uuid
 from app.core.event_bus import EventBus
 from app.services.connection_manager import ConnectionManager
 from app.services.game_room import GameRoom
+from app.services.user_service import UserService
 
 
 class RoomManager:
@@ -12,9 +13,15 @@ class RoomManager:
     el emparejamiento automático (matchmaking) y las partidas privadas por invitación.
     """
 
-    def __init__(self, connections: ConnectionManager, event_bus: Optional[EventBus] = None) -> None:
+    def __init__(
+        self,
+        connections: ConnectionManager,
+        event_bus: Optional[EventBus] = None,
+        user_service: Optional[UserService] = None,
+    ) -> None:
         self.connections = connections
         self.event_bus = event_bus
+        self.user_service = user_service or UserService()
         self.active_rooms: dict[str, GameRoom] = {}
         self.user_room: dict[str, str] = {}
         self.waiting_user: Optional[str] = None
@@ -70,6 +77,7 @@ class RoomManager:
             username2=guest,
             connections=self.connections,
             event_bus=self.event_bus,
+            user_service=self.user_service,
         )
 
         self.active_rooms[room_id] = room

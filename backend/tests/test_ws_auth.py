@@ -23,8 +23,8 @@ def test_websocket_connect_with_invalid_token():
             pass
 
 
-def test_websocket_connect_without_token_is_rejected():
-    # Conexión WebSocket rechazada cuando no se provee el token JWT obligatorio
+def test_websocket_requires_jwt_token():
+    # No se permite el antiguo fallback por nombre de usuario sin credenciales.
     client = TestClient(app)
     with pytest.raises(Exception):
         with client.websocket_connect("/ws?username=legacy_player"):

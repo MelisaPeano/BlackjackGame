@@ -17,7 +17,6 @@ from app.models.messages import (
 from app.models.player_action_enum import PlayerActionEnum
 from app.services.connection_manager import ConnectionManager
 from app.services.room_manager import RoomManager
-from app.services.user_service import UserService
 
 logger = logging.getLogger("blackjack.message_router")
 
@@ -88,8 +87,9 @@ class MessageRouter:
             room = await self.rooms.join_matchmaking(username)
             if room is None:
                 await self.connections.send(username, WaitingMsg())
-       
-      # El jugador abandona la partida en curso (pierde y el rival gana)
+            return
+
+        # El jugador abandona la partida en curso (pierde y el rival gana)
         if msg_type == "leave_game":
             if self.rooms.room_of(username) is None:
                 await self.connections.send(
@@ -109,14 +109,19 @@ class MessageRouter:
         if msg_type == "score_update":
             try:
                 score_msg = ScoreUpdateMsg(**data)
-                
-                # Validación de seguridad: el socket solo puede actualizar su propio puntaje
-                if username == score_msg.username:
-                    user_service = UserService()
-                    # Persistir suma o resta de apuestas en la base de datos (el resultado y victorias ya fueron guardados por GameRoom)
+                if username != score_msg.username:
+                    logger.warning(
+                        "El usuario %s intentó reportar un resultado para %s",
+                        username,
+                        score_msg.username,
+                    )
+                else:
+                    logger.info("Resultado de juego registrado por el servidor; verificando si hay ajuste de fichas.")
                     chips_delta = getattr(score_msg, "chips_delta", 0) or data.get("chips_delta", 0)
                     if isinstance(chips_delta, int) and chips_delta != 0:
                         try:
+                            from app.services.user_service import UserService
+                            user_service = UserService()
                             new_chips = await user_service.update_chips(username, chips_delta)
                             await self.connections.send(
                                 username,
@@ -124,13 +129,11 @@ class MessageRouter:
                             )
                         except Exception as chip_err:
                             logger.warning("Fallo al actualizar saldo de fichas para %s: %s", username, chip_err)
-                else:
-                    logger.error("[ROUTER ERROR] Alerta: %s intentó modificar puntaje de %s", username, score_msg.username)
-                    
-            except Exception as e:
+            except ValidationError as e:
                 logger.error("[ROUTER ERROR] Fallo procesando score_update: %s", e)
+            except Exception as e:
+                logger.error("[ROUTER ERROR] Fallo inesperado procesando score_update: %s", e)
             return
-        # ------------------------------------------------------------------
 
         # 2. Validación estricta del esquema de jugadas de la mesa (hit, stand)
         try:

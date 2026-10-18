@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from app.core.errors import GameError
 from app.core.event_bus import EventBus
-from app.core.events import GameStateUpdated, RoundEnded
+from app.core.events import GameStarted, GameStateUpdated, PlayerLeftEvent, RoundEnded
 from app.domain.blackjack_rules import (
     calculate_score,
     determine_next_turn,
@@ -25,7 +25,6 @@ from app.models.outcome_enum import OutcomeEnum
 from app.models.player_action_enum import PlayerActionEnum
 from app.models.player_status_enum import PlayerStatusEnum
 from app.services.connection_manager import ConnectionManager
-from app.core.errors import GameError
 from app.services.user_service import UserService
 
 logger = logging.getLogger("blackjack.game_room")
@@ -45,6 +44,7 @@ class GameRoom:
         username2: str,
         connections: ConnectionManager,
         event_bus: Optional[EventBus] = None,
+        user_service: Optional[UserService] = None,
     ) -> None:
         self.room_id = room_id
         self.players = [
@@ -57,7 +57,9 @@ class GameRoom:
         self.current_turn = CurrentPlayerEnum.NULL
         self.connections = connections
         self.event_bus = event_bus
+        self.user_service = user_service or UserService()
         self.results: dict[str, str] = {}
+        self._results_recorded = False
 
         # Cola asíncrona de jugadas y semáforo de procesamiento secuencial
         self.action_queue: asyncio.Queue[tuple[str, PlayerActionEnum, Optional[asyncio.Future]]] = asyncio.Queue()
@@ -109,6 +111,13 @@ class GameRoom:
                 # Ambos obtuvieron Blackjack en el reparto inicial, pasa al turno del dealer
                 self.current_turn = CurrentPlayerEnum.DEALER
 
+            if self.event_bus:
+                self.event_bus.publish(
+                    GameStarted(
+                        room_id=self.room_id,
+                        usernames=[player.username for player in self.players],
+                    )
+                )
             await self.broadcast_state()
 
             # Si el turno inicial pasó directo al dealer
@@ -229,24 +238,7 @@ class GameRoom:
                 self.results[player.username] = outcome.value
 
         await self.broadcast_state()
-
-        # Guardar automáticamente los resultados en MongoDB (Scoreboard e Historial)
-        user_service = UserService()
-        match_record = {
-            "room_id": self.room_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "dealer_score": self.dealer_hand.get_score(),
-            "players": []
-        }
-        for player in self.players:
-            res_outcome = self.results.get(player.username, "lose")
-            await user_service.record_match_result(player.username, res_outcome)
-            match_record["players"].append({
-                "username": player.username,
-                "score": player.get_hand().get_score(),
-                "outcome": res_outcome
-            })
-        await user_service.save_match_history(match_record)
+        await self._record_match_results()
 
         # Notificar finalización de la ronda al EventBus
         if self.event_bus:
@@ -271,30 +263,57 @@ class GameRoom:
                     else:
                         self.results[player.username] = OutcomeEnum.WIN.value
 
+                if self.event_bus:
+                    self.event_bus.publish(PlayerLeftEvent(room_id=self.room_id, username=username))
                 await self.broadcast_state()
+                await self._record_match_results()
+                if self.event_bus:
+                    self.event_bus.publish(RoundEnded(room_id=self.room_id, results=self.results))
 
-                # Guardar resultados y victoria del jugador restante
-                user_service = UserService()
-                for player in self.players:
-                    await user_service.record_match_result(player.username, self.results[player.username])
+    async def _record_match_results(self) -> None:
+        if self._results_recorded:
+            return
 
+        self._results_recorded = True
+        normalized_results = {
+            OutcomeEnum.WIN.value: "win",
+            OutcomeEnum.LOSE.value: "loss",
+            OutcomeEnum.DRAW.value: "tie",
+        }
+        for username, result in self.results.items():
+            normalized_result = normalized_results.get(result)
+            if normalized_result is None:
+                logger.error("Resultado desconocido al actualizar scoreboard: %s", result)
+                continue
+            try:
+                await self.user_service.record_match_result(username, normalized_result)
+            except Exception:
+                logger.exception(
+                    "No se pudo registrar el resultado de %s en la sala %s",
+                    username,
+                    self.room_id,
+                )
+
+        # Guardar historial de la partida en MongoDB si el servicio lo soporta
+        if hasattr(self.user_service, "save_match_history"):
+            try:
+                dealer_score = self.dealer_hand.get_score() if any(p.status != PlayerStatusEnum.LEFT for p in self.players) else 0
                 match_record = {
                     "room_id": self.room_id,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "dealer_score": 0,
+                    "dealer_score": dealer_score,
                     "players": [
                         {
                             "username": p.username,
                             "score": p.get_hand().get_score(),
-                            "outcome": self.results.get(p.username, "lose")
+                            "outcome": normalized_results.get(self.results.get(p.username), self.results.get(p.username, "lose"))
                         }
                         for p in self.players
                     ]
                 }
-                await user_service.save_match_history(match_record)
-
-                if self.event_bus:
-                    self.event_bus.publish(RoundEnded(room_id=self.room_id, results=self.results))
+                await self.user_service.save_match_history(match_record)
+            except Exception:
+                logger.exception("No se pudo guardar el historial de la partida %s", self.room_id)
 
     def get_player(self, username: str) -> GameUser:
         """Retorna el objeto GameUser correspondiente al nombre de usuario."""
@@ -327,8 +346,17 @@ class GameRoom:
             p_data: dict[str, Any] = {
                 "username": player.username,
                 "role": player.role.value,
-                "hand": [card.to_dict() for card in player.get_hand().cards],
-                "score": player.get_hand().get_score(),
+                "hand": [
+                    card.to_dict()
+                    if player.username == viewer or self.game_state == GameStateEnum.FINISHED
+                    else {"hidden": True}
+                    for card in player.get_hand().cards
+                ],
+                "score": (
+                    player.get_hand().get_score()
+                    if player.username == viewer or self.game_state == GameStateEnum.FINISHED
+                    else None
+                ),
                 "status": player.status.value,
             }
             if self.game_state == GameStateEnum.FINISHED and player.username in self.results:
