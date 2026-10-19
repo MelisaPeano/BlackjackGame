@@ -16,7 +16,7 @@ class DatabaseManager:
         if not self.client:
             self.client = AsyncIOMotorClient(
                 settings.MONGODB_URI,
-                serverSelectionTimeoutMS=2000
+                serverSelectionTimeoutMS=5000
             )
             self.db = self.client[settings.DB_NAME]
             logger.info("Conectado exitosamente a MongoDB en %s", settings.MONGODB_URI)

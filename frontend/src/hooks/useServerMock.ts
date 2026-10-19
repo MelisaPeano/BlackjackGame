@@ -22,7 +22,7 @@ export const useServerMock = () => {
     cpuUsage: '12%',
   });
 
-  const [users, setUsers] = useState<User[]>([
+  const [users] = useState<User[]>([
     { id: '1', username: 'Player1', status: 'playing' },
     { id: '2', username: 'Player2', status: 'idle' },
   ]);

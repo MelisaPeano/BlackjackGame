@@ -45,8 +45,9 @@ async def websocket_endpoint(
         # Notificar conexión exitosa y estado actual del lobby
         await state.connections.send(username, ConnectedMsg(username=username))
         
+        active_games = state.rooms.get_active_games_count()
         active_users = state.connections.get_online_users()
-        await state.connections.broadcast(LobbyStateMsg(online_users=active_users))
+        await state.connections.broadcast(LobbyStateMsg(online_users=active_users, active_games=active_games))
 
         # Bucle de escucha de eventos entrantes
         while True:
@@ -62,6 +63,7 @@ async def websocket_endpoint(
         await state.rooms.handle_disconnect(username)
         state.connections.disconnect(username, websocket)
 
+        active_games = state.rooms.get_active_games_count()
         if state.event_bus:
             state.event_bus.publish(
                 PlayerDisconnected(
@@ -69,6 +71,5 @@ async def websocket_endpoint(
                     room_id=room.room_id if room is not None else None,
                 )
             )
-
         active_users = state.connections.get_online_users()
-        await state.connections.broadcast(LobbyStateMsg(online_users=active_users))
+        await state.connections.broadcast(LobbyStateMsg(online_users=active_users, active_games=active_games))

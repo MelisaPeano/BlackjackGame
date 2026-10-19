@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.core.errors import GameError
@@ -292,6 +293,27 @@ class GameRoom:
                     username,
                     self.room_id,
                 )
+
+        # Guardar historial de la partida en MongoDB si el servicio lo soporta
+        if hasattr(self.user_service, "save_match_history"):
+            try:
+                dealer_score = self.dealer_hand.get_score() if any(p.status != PlayerStatusEnum.LEFT for p in self.players) else 0
+                match_record = {
+                    "room_id": self.room_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "dealer_score": dealer_score,
+                    "players": [
+                        {
+                            "username": p.username,
+                            "score": p.get_hand().get_score(),
+                            "outcome": normalized_results.get(self.results.get(p.username), self.results.get(p.username, "lose"))
+                        }
+                        for p in self.players
+                    ]
+                }
+                await self.user_service.save_match_history(match_record)
+            except Exception:
+                logger.exception("No se pudo guardar el historial de la partida %s", self.room_id)
 
     def get_player(self, username: str) -> GameUser:
         """Retorna el objeto GameUser correspondiente al nombre de usuario."""

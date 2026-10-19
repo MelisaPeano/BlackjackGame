@@ -16,7 +16,8 @@ const Login: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch('https://localhost:8000/api/auth/login', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,8 +31,8 @@ const Login: React.FC = () => {
         throw new Error(data.detail || 'Credenciales inválidas');
       }
 
-      // Pasamos el username y el token real devuelto por el backend
-      login(username, data.access_token);
+      // Pasamos el username, el token real y el saldo de fichas provisto por la base de datos
+      login(username, data.access_token, data.user?.chips ?? 10000);
       navigate('/dashboard');
       
     } catch (err: any) {

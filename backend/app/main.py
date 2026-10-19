@@ -52,14 +52,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Blackjack Game API", lifespan=lifespan)
 
-origins = [
-    origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "").split(",")
-    if origin.strip()
+# Configuración de CORS para permitir peticiones desde el frontend (React / Vite en Azure y local)
+allowed_origins = [
+    "https://zealous-ground-097c6b31e.4.azurestaticapps.net",
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
 ]
+custom_origins = [orig.strip() for orig in os.getenv("CORS_ORIGINS", "").split(",") if orig.strip()]
+if custom_origins:
+    allowed_origins.extend(custom_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.azurestaticapps\.net",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,4 +90,25 @@ app.include_router(websocket_router)
 @app.get("/")
 async def root():
     """Ruta raíz para verificación de salud del servidor."""
-    return {"message": "Welcome to the Blackjack Game API"}
+    db_status = "disconnected"
+    if db_manager.db is not None:
+        try:
+            await db_manager.db.command("ping")
+            db_status = "connected"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+    return {
+        "message": "Welcome to the Blackjack Game API",
+        "database": db_status
+    }
+
+
+@app.get("/api/stats")
+async def get_stats():
+    """Retorna estadísticas en tiempo real del lobby y partidas activas."""
+    return {
+        "online_users": len(connections.get_online_users()),
+        "active_games": rooms.get_active_games_count(),
+        "server_status": "ONLINE",
+        "protocol": "WSS / TLS (Azure)"
+    }

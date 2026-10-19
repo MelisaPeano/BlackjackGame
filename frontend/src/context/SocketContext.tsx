@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 interface SocketContextType {
   socket: WebSocket | null;
   onlineUsers: string[];
+  activeGames: number;
   sendInvite: (target: string) => void;
   incomingInvite: string | null;
   respondInvite: (sender: string, accept: boolean) => void;
@@ -17,9 +18,10 @@ interface SocketContextType {
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
 export const SocketProvider = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth(); 
+  const { user, setChips } = useAuth(); 
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [activeGames, setActiveGames] = useState<number>(0);
   const [incomingInvite, setIncomingInvite] = useState<string | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
   const [gameState, setGameState] = useState<any>(null);
@@ -41,6 +43,13 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       
       if (data.type === 'lobby_state') {
         setOnlineUsers(data.online_users.filter((u: string) => u !== user.username));
+        if (typeof data.active_games === 'number') {
+          setActiveGames(data.active_games);
+        }
+      }
+
+      if (data.type === 'chips_updated' && typeof data.chips === 'number') {
+        setChips(data.chips);
       }
       
       if (data.type === 'invite') {
@@ -92,7 +101,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <SocketContext.Provider value={{ 
-      socket, onlineUsers, sendInvite, incomingInvite, respondInvite, gameStarted, setGameStarted, gameState, setGameState, joinMatchmaking
+      socket, onlineUsers, activeGames, sendInvite, incomingInvite, respondInvite, gameStarted, setGameStarted, gameState, setGameState, joinMatchmaking
     }}>
       {children}
     </SocketContext.Provider>
