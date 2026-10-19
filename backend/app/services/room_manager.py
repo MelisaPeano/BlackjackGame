@@ -52,11 +52,11 @@ class RoomManager:
         return None
 
     def cancel_waiting(self, username: str) -> None:
-        """Remueve al usuario de la sala de espera al desconectarse."""
-        if self.waiting_user == username:
-            self.waiting_user = None
-        if username in self.waiting_users:
+        """Remueve al usuario de la sala de espera / cola de emparejamiento."""
+        while username in self.waiting_users:
             self.waiting_users.remove(username)
+        if self.waiting_user == username:
+            self.waiting_user = self.waiting_users[0] if self.waiting_users else None
 
     def room_of(self, username: str) -> Optional[GameRoom]:
         """Retorna la sala activa a la que pertenece el usuario, o None si no está jugando."""
@@ -103,6 +103,7 @@ class RoomManager:
 
     async def leave_table(self, username: str) -> None:
         """Limpia la sala cuando un jugador regresa al lobby tras terminar la partida."""
+        self.cancel_waiting(username)
         room = self.room_of(username)
         if room:
             room_id = room.room_id

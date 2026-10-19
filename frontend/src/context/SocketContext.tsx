@@ -13,6 +13,8 @@ interface SocketContextType {
   gameState: any;
   setGameState: (val: any) => void;
   joinMatchmaking: () => void;
+  cancelMatchmaking: () => void;
+  isSearchingMatch: boolean;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -25,6 +27,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [incomingInvite, setIncomingInvite] = useState<string | null>(null);
   const [gameStarted, setGameStarted] = useState(false);
   const [gameState, setGameState] = useState<any>(null);
+  const [isSearchingMatch, setIsSearchingMatch] = useState(false);
 
   useEffect(() => {
     // Al depender del string primitivo, evitamos reconexiones al cambiar el saldo
@@ -57,20 +60,33 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (data.type === 'invite_response' && data.accepted) {
+        setIsSearchingMatch(false);
         setGameStarted(true);
+      }
+
+      if (data.type === 'waiting') {
+        setIsSearchingMatch(true);
+      }
+
+      if (data.type === 'matchmaking_cancelled') {
+        setIsSearchingMatch(false);
       }
 
       if (data.type === 'game_state') {
         // CLAVE: Solo activamos la redirección si la partida NO ha finalizado
         const stateStr = String(data.state?.state).toLowerCase();
         if (stateStr !== 'finished') {
+          setIsSearchingMatch(false);
           setGameStarted(true);
         }
         setGameState(data.state); 
       }
     };
 
-    ws.onclose = () => console.log('Socket cerrado');
+    ws.onclose = () => {
+      console.log('Socket cerrado');
+      setIsSearchingMatch(false);
+    };
     
     setSocket(ws);
 
@@ -94,14 +110,37 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
   // Partida rapida. El servidor te pone en cola y te empareja cuando haya otro jugador esperando
   const joinMatchmaking = () => {
+    setIsSearchingMatch(true);
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'join_matchmaking' }));
     }
   };
 
+  const cancelMatchmaking = () => {
+    setIsSearchingMatch(false);
+    setGameStarted(false);
+    setGameState(null);
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'cancel_matchmaking' }));
+      socket.send(JSON.stringify({ type: 'leave_table' }));
+    }
+  };
+
   return (
     <SocketContext.Provider value={{ 
-      socket, onlineUsers, activeGames, sendInvite, incomingInvite, respondInvite, gameStarted, setGameStarted, gameState, setGameState, joinMatchmaking
+      socket, 
+      onlineUsers, 
+      activeGames, 
+      sendInvite, 
+      incomingInvite, 
+      respondInvite, 
+      gameStarted, 
+      setGameStarted, 
+      gameState, 
+      setGameState, 
+      joinMatchmaking,
+      cancelMatchmaking,
+      isSearchingMatch
     }}>
       {children}
     </SocketContext.Provider>

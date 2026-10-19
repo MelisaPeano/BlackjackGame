@@ -7,6 +7,8 @@ import { useSoundEffects } from '../hooks/useSoundEffects';
 import chip1 from '../assets/images/blackjack/pokerchip1.png';
 import chip2 from '../assets/images/blackjack/pokerchip2.png';
 import chip3 from '../assets/images/blackjack/pokerchip3.png';
+import cardBack from '../assets/images/blackjack/card_back.png';
+import { XCircle } from 'lucide-react';
 
 const cardImages = import.meta.glob('../assets/images/blackjack/*.png', { 
   eager: true, 
@@ -35,13 +37,46 @@ const getCardImage = (card: any) => {
 
 const BlackjackTable: React.FC = () => {
   const { user, updateChips } = useAuth();
-  const { socket, gameState, setGameState, setGameStarted, sendInvite } = useSocket();
+  const { 
+    socket, 
+    gameState, 
+    setGameState, 
+    setGameStarted, 
+    sendInvite, 
+    cancelMatchmaking, 
+    isSearchingMatch 
+  } = useSocket();
   const { playChip, playWin, playLose } = useSoundEffects();
   const navigate = useNavigate();
   
   const hasEmitted = useRef(false);
   const [currentBet, setCurrentBet] = useState(100); 
   const [rematchSent, setRematchSent] = useState(false);
+
+  // Si el usuario presiona el botón 'Atrás' en el navegador durante la búsqueda
+  useEffect(() => {
+    const handlePopState = () => {
+      cancelMatchmaking();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [cancelMatchmaking]);
+
+  // Si el componente se desmonta mientras no hay partida activa o mientras se espera en la cola
+  useEffect(() => {
+    let isCurrentMounted = true;
+    return () => {
+      isCurrentMounted = false;
+      setTimeout(() => {
+        if (!isCurrentMounted && (!gameState || String(gameState?.state).toLowerCase() === 'finished')) {
+          cancelMatchmaking();
+        }
+      }, 100);
+    };
+  }, [gameState, cancelMatchmaking]);
 
   const currentUsername = user?.username || localStorage.getItem('casino_username') || 'Jugador';
   const currentChips = user?.chips ?? 10000;
@@ -94,8 +129,54 @@ const BlackjackTable: React.FC = () => {
 
   if (!gameState) {
     return (
-      <div className="min-h-screen bg-green-900 flex items-center justify-center text-white font-serif">
-        <h2 className="text-2xl animate-pulse">Sincronizando mesa multijugador...</h2>
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-white font-sans relative overflow-hidden">
+        {/* Luces y brillo de fondo estilo Casino VIP */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(22,101,52,0.35)_0%,_rgba(15,23,42,0.95)_75%)] pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 bg-slate-900/90 backdrop-blur-xl border border-yellow-500/30 rounded-3xl p-8 max-w-md w-full shadow-[0_0_50px_rgba(234,179,8,0.15)] text-center space-y-6">
+          {/* Indicador de carga animado */}
+          <div className="relative mx-auto w-24 h-24 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-full border-4 border-yellow-500/20 border-t-yellow-500 animate-spin" />
+            <div className="absolute inset-2 rounded-full border-2 border-emerald-500/30 animate-ping opacity-30" />
+            <img 
+              src={cardBack} 
+              alt="Casino Card Back" 
+              className="w-12 h-auto drop-shadow-[0_0_15px_rgba(234,179,8,0.6)] animate-pulse"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center space-x-2 bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>{isSearchingMatch ? 'Buscando en cola de emparejamiento' : 'Sincronizando mesa multijugador'}</span>
+            </div>
+            <h2 className="text-2xl font-bold font-serif text-white tracking-wide">
+              {isSearchingMatch ? 'Buscando Oponente' : 'Entrando a la Mesa VIP'}
+            </h2>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              Esperando a que otro jugador ingrese a la sala para comenzar la partida en vivo...
+            </p>
+          </div>
+
+          {/* Botón de Cancelar Búsqueda y Volver al Lobby */}
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                cancelMatchmaking();
+                navigate('/dashboard');
+              }}
+              className="w-full flex items-center justify-center space-x-2.5 py-3.5 px-6 rounded-xl font-bold font-sans text-sm uppercase tracking-wider bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 hover:border-red-400 transition-all duration-200 shadow-lg hover:shadow-red-950/50 transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+            >
+              <XCircle className="w-5 h-5 text-red-400" />
+              <span>Cancelar Búsqueda y Volver</span>
+            </button>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            Al cancelar o retroceder en el navegador serás retirado de la cola de espera inmediatamente.
+          </p>
+        </div>
       </div>
     );
   }

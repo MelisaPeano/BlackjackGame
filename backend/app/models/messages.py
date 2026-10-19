@@ -44,6 +44,10 @@ class ConnectedMsg(BaseModel):
 class WaitingMsg(BaseModel):
     type: Literal["waiting"] = "waiting"
 
+class MatchmakingCancelledMsg(BaseModel):
+    type: Literal["matchmaking_cancelled"] = "matchmaking_cancelled"
+
+
 class GameStateMsg(BaseModel):
     type: Literal["game_state"] = "game_state"
     state: dict

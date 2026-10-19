@@ -76,6 +76,34 @@ async def test_join_matchmaking_returns_after_handling_request():
 
 
 @pytest.mark.asyncio
+async def test_cancel_matchmaking_removes_player_from_queue():
+    connections = ConnectionManager()
+    socket = MockWebSocket()
+    connections.connect("waiting_player", socket)
+    rooms = RoomManager(connections)
+    router = MessageRouter(connections, rooms)
+
+    # 1. Jugador entra a matchmaking
+    await router.route("waiting_player", '{"type":"join_matchmaking"}')
+    assert rooms.waiting_user == "waiting_player"
+    assert "waiting_player" in rooms.waiting_users
+
+    # 2. Jugador cancela matchmaking
+    await router.route("waiting_player", '{"type":"cancel_matchmaking"}')
+    assert rooms.waiting_user is None
+    assert "waiting_player" not in rooms.waiting_users
+    assert any(m.get("type") == "matchmaking_cancelled" for m in socket.sent_messages)
+
+    # 3. Un segundo jugador entra a matchmaking -> NO debe emparejarse con el jugador que canceló
+    socket2 = MockWebSocket()
+    connections.connect("player_2", socket2)
+    await router.route("player_2", '{"type":"join_matchmaking"}')
+    assert rooms.waiting_user == "player_2"
+    assert rooms.room_of("waiting_player") is None
+
+
+
+@pytest.mark.asyncio
 async def test_client_score_update_is_accepted_but_not_authoritative():
     connections = ConnectionManager()
     socket = MockWebSocket()

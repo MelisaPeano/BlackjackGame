@@ -16,10 +16,17 @@ const Dashboard: React.FC = () => {
     respondInvite, 
     gameStarted, 
     setGameStarted,
-    joinMatchmaking
+    joinMatchmaking,
+    cancelMatchmaking
   } = useSocket();
 
   const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
+
+  // Si el usuario llega al Dashboard (o vuelve con el botón 'Atrás' del navegador),
+  // se cancela inmediatamente cualquier emparejamiento previo pendiente
+  useEffect(() => {
+    cancelMatchmaking();
+  }, []);
 
   // Redirección automática al detectar el inicio del juego
   useEffect(() => {

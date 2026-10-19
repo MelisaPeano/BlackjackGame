@@ -12,6 +12,7 @@ from app.models.messages import (
     InviteResponseMsg,
     ScoreUpdateMsg,
     WaitingMsg,
+    MatchmakingCancelledMsg,
     client_message_adapter,
 )
 from app.models.player_action_enum import PlayerActionEnum
@@ -89,6 +90,12 @@ class MessageRouter:
                 await self.connections.send(username, WaitingMsg())
             return
 
+        # Cancelar búsqueda de matchmaking
+        if msg_type == "cancel_matchmaking":
+            self.rooms.cancel_waiting(username)
+            await self.connections.send(username, MatchmakingCancelledMsg())
+            return
+
         # El jugador abandona la partida en curso (pierde y el rival gana)
         if msg_type == "leave_game":
             if self.rooms.room_of(username) is None:
@@ -100,8 +107,9 @@ class MessageRouter:
                 await self.rooms.leave_game(username)
             return
 
-        # El jugador regresa al lobby tras finalizar la partida
+        # El jugador regresa al lobby tras finalizar la partida o cancelar
         if msg_type == "leave_table":
+            self.rooms.cancel_waiting(username)
             await self.rooms.leave_table(username)
             return
 
