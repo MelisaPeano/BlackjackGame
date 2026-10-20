@@ -118,11 +118,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
   const cancelMatchmaking = () => {
     setIsSearchingMatch(false);
-    setGameStarted(false);
-    setGameState(null);
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'cancel_matchmaking' }));
-      socket.send(JSON.stringify({ type: 'leave_table' }));
     }
   };
 

@@ -53,30 +53,19 @@ const BlackjackTable: React.FC = () => {
   const [currentBet, setCurrentBet] = useState(100); 
   const [rematchSent, setRematchSent] = useState(false);
 
-  // Si el usuario presiona el botón 'Atrás' en el navegador durante la búsqueda
+  // Si el usuario presiona el botón 'Atrás' en el navegador mientras estaba buscando partida
   useEffect(() => {
     const handlePopState = () => {
-      cancelMatchmaking();
+      if (isSearchingMatch) {
+        cancelMatchmaking();
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
-  }, [cancelMatchmaking]);
-
-  // Si el componente se desmonta mientras no hay partida activa o mientras se espera en la cola
-  useEffect(() => {
-    let isCurrentMounted = true;
-    return () => {
-      isCurrentMounted = false;
-      setTimeout(() => {
-        if (!isCurrentMounted && (!gameState || String(gameState?.state).toLowerCase() === 'finished')) {
-          cancelMatchmaking();
-        }
-      }, 100);
-    };
-  }, [gameState, cancelMatchmaking]);
+  }, [isSearchingMatch, cancelMatchmaking]);
 
   const currentUsername = user?.username || localStorage.getItem('casino_username') || 'Jugador';
   const currentChips = user?.chips ?? 10000;
@@ -163,13 +152,15 @@ const BlackjackTable: React.FC = () => {
           <div className="pt-2">
             <button
               onClick={() => {
-                cancelMatchmaking();
+                if (isSearchingMatch) {
+                  cancelMatchmaking();
+                }
                 navigate('/dashboard');
               }}
               className="w-full flex items-center justify-center space-x-2.5 py-3.5 px-6 rounded-xl font-bold font-sans text-sm uppercase tracking-wider bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 hover:border-red-400 transition-all duration-200 shadow-lg hover:shadow-red-950/50 transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
             >
               <XCircle className="w-5 h-5 text-red-400" />
-              <span>Cancelar Búsqueda y Volver</span>
+              <span>{isSearchingMatch ? 'Cancelar Búsqueda y Volver' : 'Volver al Lobby'}</span>
             </button>
           </div>
 
