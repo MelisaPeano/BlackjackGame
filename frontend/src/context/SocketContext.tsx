@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from './AuthContext';
+import { isTokenExpired } from '../utils/auth';
 
 interface SocketContextType {
   socket: WebSocket | null;
@@ -35,6 +36,13 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     const token = localStorage.getItem('casino_auth_token');
     if (!token) return;
+    if (isTokenExpired(token)) {
+      localStorage.removeItem('casino_auth_token');
+      localStorage.removeItem('casino_username');
+      localStorage.removeItem('casino_chips');
+      window.location.href = '/login?expired=true';
+      return;
+    }
 
     const baseUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:8000/ws';
     const ws = new WebSocket(`${baseUrl}?token=${token}`);
@@ -83,9 +91,16 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    ws.onclose = () => {
-      console.log('Socket cerrado');
+    ws.onclose = (event) => {
+      console.log('Socket cerrado', event.code, event.reason);
       setIsSearchingMatch(false);
+      // Código 4401: Token inválido o expirado
+      if (event.code === 4401 || (event.reason && event.reason.toLowerCase().includes('expirado'))) {
+        localStorage.removeItem('casino_auth_token');
+        localStorage.removeItem('casino_username');
+        localStorage.removeItem('casino_chips');
+        window.location.href = '/login?expired=true';
+      }
     };
     
     setSocket(ws);

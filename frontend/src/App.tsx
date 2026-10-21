@@ -7,11 +7,21 @@ import Dashboard from './components/Dashboard';
 import BlackjackTable from './components/BlackjackTable'; 
 import Scoreboard from './components/Scoreboard';
 import { SocketProvider } from './context/SocketContext';
+import { isTokenExpired } from './utils/auth';
 
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const isAuthenticated = localStorage.getItem('casino_auth_token') !== null;
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  const token = localStorage.getItem('casino_auth_token');
+  const isValid = token !== null && !isTokenExpired(token);
+
+  if (!isValid && token) {
+    localStorage.removeItem('casino_auth_token');
+    localStorage.removeItem('casino_username');
+    localStorage.removeItem('casino_chips');
+    return <Navigate to="/login?expired=true" replace />;
+  }
+
+  return isValid ? <>{children}</> : <Navigate to="/login" replace />;
 };
 
 const App: React.FC = () => {

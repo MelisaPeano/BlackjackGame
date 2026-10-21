@@ -16,19 +16,12 @@ const Dashboard: React.FC = () => {
     respondInvite, 
     gameStarted, 
     setGameStarted,
-    joinMatchmaking,
-    cancelMatchmaking,
-    isSearchingMatch
+    joinMatchmaking
   } = useSocket();
 
   const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
 
-  // Si el usuario regresa al Dashboard mientras estaba buscando partida, cancelamos la cola
-  useEffect(() => {
-    if (isSearchingMatch) {
-      cancelMatchmaking();
-    }
-  }, [isSearchingMatch, cancelMatchmaking]);
+
 
   // Redirección automática al detectar el inicio del juego
   useEffect(() => {
@@ -110,9 +103,16 @@ const Dashboard: React.FC = () => {
             <h1 className="text-2xl font-bold font-serif text-white tracking-wide">
               Panel de {user?.username}
             </h1>
-            <p className="text-yellow-500 font-bold text-sm">
-              Saldo disponible: ${user?.chips}
-            </p>
+            <div className="flex items-center space-x-2 mt-0.5">
+              <span className="text-yellow-500 font-bold text-sm">
+                Saldo disponible: ${user?.chips}
+              </span>
+              <span className="text-slate-500 text-xs">•</span>
+              <span className="text-emerald-400 text-xs font-medium flex items-center">
+                <ShieldCheck className="w-3 h-3 mr-1 text-emerald-400 inline" />
+                Sesión segura activa (Token JWT 24h)
+              </span>
+            </div>
           </div>
         </div>
         <button

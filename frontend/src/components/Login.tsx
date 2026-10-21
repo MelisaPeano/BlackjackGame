@@ -59,6 +59,12 @@ const Login: React.FC = () => {
             <p className="text-yellow-500/80 text-sm">Ingrese sus credenciales para jugar</p>
           </div>
 
+          {new URLSearchParams(window.location.search).get('expired') === 'true' && (
+            <div className="mb-4 p-3 bg-yellow-500/20 border border-yellow-500/50 rounded-lg text-yellow-300 text-sm text-center font-medium">
+              ⚠️ Tu sesión ha expirado por seguridad (duración: 24h). Inicia sesión nuevamente.
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm text-center">
               {error}

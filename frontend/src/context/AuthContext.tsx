@@ -1,4 +1,5 @@
 import { createContext, useState, useContext, useEffect, type ReactNode } from 'react';
+import { isTokenExpired } from '../utils/auth';
 
 interface User {
   id: string;
@@ -25,6 +26,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const savedChips = localStorage.getItem('casino_chips');
     
     if (token && savedUsername) {
+      if (isTokenExpired(token)) {
+        localStorage.removeItem('casino_auth_token');
+        localStorage.removeItem('casino_username');
+        localStorage.removeItem('casino_chips');
+        return null;
+      }
       return {
         id: 'usr_real',
         username: savedUsername,
@@ -35,14 +42,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return null;
   });
 
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('casino_auth_token');
+    localStorage.removeItem('casino_username');
+    localStorage.removeItem('casino_chips');
+  };
+
   const refreshUser = async () => {
     const token = localStorage.getItem('casino_auth_token');
     if (!token) return;
+    if (isTokenExpired(token)) {
+      logout();
+      window.location.href = '/login?expired=true';
+      return;
+    }
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://localhost:8000';
       const res = await fetch(`${apiUrl}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (res.status === 401) {
+        logout();
+        window.location.href = '/login?expired=true';
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setUser(prev => prev ? { ...prev, chips: data.chips } : {
@@ -60,6 +84,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     refreshUser();
+
+    // Verificación periódica activa cada 15 segundos
+    const interval = setInterval(() => {
+      const token = localStorage.getItem('casino_auth_token');
+      if (token && isTokenExpired(token)) {
+        logout();
+        window.location.href = '/login?expired=true';
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const login = (username: string, token: string, initialChips: number = 10000) => {
@@ -74,13 +109,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem('casino_chips', String(initialChips));
     // Sincronizar en segundo plano
     refreshUser();
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('casino_auth_token');
-    localStorage.removeItem('casino_username');
-    localStorage.removeItem('casino_chips');
   };
 
   // Función para sumar o restar saldo al estado global y persistirlo localmente
